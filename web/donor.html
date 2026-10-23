@@ -3,10 +3,218 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Donor – Last-Mile Aid Dispatch</title>
+    <title>Donor Portal — Last-Mile Aid Dispatch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #070b14;
+            --surface: rgba(16, 24, 40, 0.85);
+            --surface-card: rgba(22, 34, 58, 0.75);
+            --border: rgba(255, 255, 255, 0.08);
+            --primary: #38bdf8;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            background: rgba(11, 17, 31, 0.9);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            width: 100%;
+            padding: 0 1.5rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.5rem;
+        }
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+            color: var(--primary);
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+        }
+        input, select {
+            width: 100%;
+            padding: 0.75rem;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: #fff;
+            font-family: var(--font-main);
+        }
+        input:focus { border-color: var(--primary); outline: none; }
+        .btn-submit {
+            width: 100%;
+            padding: 0.85rem;
+            background: linear-gradient(135deg, #38bdf8, #6366f1);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: opacity 0.2s;
+        }
+        .btn-submit:hover { opacity: 0.9; }
+        .plan-summary {
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .pnr-counter {
+            font-family: var(--font-mono);
+            font-size: 2rem;
+            color: var(--accent-amber);
+            font-weight: 700;
+            margin: 0.5rem 0;
+        }
+        .chunk-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .chunk-pill {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.6rem 0.8rem;
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
 </head>
 <body>
-    <!-- Donor page: form for item, quantity, expiry, location -->
-    <!-- Shows rescue plan and PNR countdown after submission -->
+    <header>
+        <div style="font-weight:700; font-size:1.2rem;">🍲 Donor Food Rescue Portal</div>
+        <a href="/ops" style="color:var(--primary); text-decoration:none; font-size:0.9rem;">← Return to Ops Center</a>
+    </header>
+
+    <div class="container">
+        <!-- Donation Form -->
+        <div class="card">
+            <h2 class="card-title">Post Food Donation</h2>
+            <form id="donation-form" onsubmit="submitBatch(event)">
+                <div class="form-group">
+                    <label>Item Description</label>
+                    <input type="text" id="item" value="Hot Banquet Rice & Dal" required>
+                </div>
+                <div class="form-group">
+                    <label>Total Units / Meals</label>
+                    <input type="number" id="quantity" value="180" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Perishability Expiry (Minutes)</label>
+                    <input type="number" id="expiry" value="75" min="5" required>
+                </div>
+                <div class="form-group">
+                    <label>Special Classification Tags</label>
+                    <select id="tags" multiple style="height: 80px;">
+                        <option value="cooked_meal" selected>Cooked Meal</option>
+                        <option value="infant_formula">Infant Formula (Needs Clean Water)</option>
+                        <option value="dairy">Dairy / Cold Chain Required</option>
+                        <option value="contains_nuts">Contains Nuts</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-submit">Generate Live Rescue Plan</button>
+            </form>
+        </div>
+
+        <!-- Rescue Plan Output -->
+        <div class="card">
+            <h2 class="card-title">Active Rescue Plan</h2>
+            <div id="plan-display">
+                <p style="color:var(--text-muted); font-size:0.9rem;">Submit a donation to view the real-time chunked rescue plan, PNR countdown, and courier allocations.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function submitBatch(e) {
+            e.preventDefault();
+            const selectedTags = Array.from(document.getElementById('tags').selectedOptions).map(o => o.value);
+            const payload = {
+                item: document.getElementById('item').value,
+                quantity: parseInt(document.getElementById('quantity').value),
+                expiry_minutes: parseInt(document.getElementById('expiry').value),
+                donor_lat: 28.6139,
+                donor_lon: 77.2090,
+                tags: selectedTags
+            };
+
+            const res = await fetch('/batches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            renderPlan(data.plan, data.lots);
+        }
+
+        function renderPlan(plan, lots) {
+            const container = document.getElementById('plan-display');
+            let chunksHtml = '';
+            plan.chunks.forEach(c => {
+                chunksHtml += `
+                    <div class="chunk-pill">
+                        <span>🛵 <b>${c.rider_name}</b> → ${c.shelter_name}</span>
+                        <span style="color:#38bdf8;">${c.units} meals (${c.slack_minutes}m slack)</span>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = `
+                <div class="plan-summary">
+                    <div style="font-size:0.85rem; color:#94a3b8;">POINT OF NO RETURN (PNR)</div>
+                    <div class="pnr-counter">${plan.pnr_minutes} min left</div>
+                    <div style="font-size:0.9rem;">
+                        <b>Rescuable:</b> <span style="color:#10b981;">${plan.rescuable_units}</span> / ${plan.total_quantity} meals
+                        ${plan.unrescued_units > 0 ? `<br><b style="color:#f43f5e;">At Risk:</b> ${plan.unrescued_units} meals (Surge Broadcast Active)` : ''}
+                    </div>
+                </div>
+                <div style="font-weight:600; font-size:0.9rem; margin-top:1rem;">Chunked Courier Assignments (${lots.length} lots):</div>
+                <div class="chunk-list">${chunksHtml}</div>
+            `;
+        }
+    </script>
 </body>
 </html>

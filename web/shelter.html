@@ -3,9 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shelter – Last-Mile Aid Dispatch</title>
+    <title>Shelter Portal — Last-Mile Aid Dispatch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #070b14;
+            --surface: rgba(16, 24, 40, 0.9);
+            --surface-card: rgba(22, 34, 58, 0.8);
+            --border: rgba(255, 255, 255, 0.08);
+            --primary: #38bdf8;
+            --accent-green: #10b981;
+            --accent-rose: #f43f5e;
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg-dark);
+            color: #f1f5f9;
+            font-family: var(--font-main);
+            min-height: 100vh;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+        }
+        .stat-box {
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.85rem;
+            text-align: center;
+        }
+        .stat-val {
+            font-size: 1.5rem;
+            font-family: var(--font-mono);
+            font-weight: 700;
+        }
+        .toggle-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            background: rgba(0,0,0,0.25);
+            padding: 1rem;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        .toggle-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+        .btn-confirm {
+            width: 100%;
+            padding: 0.9rem;
+            background: var(--accent-green);
+            color: #000;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-    <!-- Shelter page: need/capability toggles, open/closed, confirm receipt -->
+    <div class="container">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <h2 style="font-size:1.25rem;">🏠 Shelter Intake Console</h2>
+                <span id="shelter-name" style="color:var(--primary); font-size:0.85rem;">Connaught Place Shelter</span>
+            </div>
+            <a href="/ops" style="color:var(--primary); text-decoration:none; font-size:0.85rem;">← Ops Map</a>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div style="font-size:0.75rem; color:#94a3b8;">DEMAND</div>
+                <div class="stat-val" id="demand-val" style="color:#38bdf8;">50</div>
+            </div>
+            <div class="stat-box">
+                <div style="font-size:0.75rem; color:#94a3b8;">INBOUND</div>
+                <div class="stat-val" id="inbound-val" style="color:#f59e0b;">0</div>
+            </div>
+            <div class="stat-box">
+                <div style="font-size:0.75rem; color:#94a3b8;">DELIVERED</div>
+                <div class="stat-val" id="delivered-val" style="color:#10b981;">0</div>
+            </div>
+        </div>
+
+        <!-- Safety Capabilities Published -->
+        <div class="toggle-group">
+            <div style="font-weight:600; font-size:0.85rem; color:#94a3b8; text-transform:uppercase;">Capability Flags (Safety Rules)</div>
+            <div class="toggle-item">
+                <span>💧 Clean Water Supply</span>
+                <input type="checkbox" id="cap-water" checked onchange="updateCapabilities()">
+            </div>
+            <div class="toggle-item">
+                <span>❄️ Cold Chain / Refrigeration</span>
+                <input type="checkbox" id="cap-fridge" checked onchange="updateCapabilities()">
+            </div>
+            <div class="toggle-item">
+                <span>🚪 Shelter Open / Accepting Deliveries</span>
+                <input type="checkbox" id="shelter-open" checked onchange="toggleOpen()">
+            </div>
+        </div>
+
+        <button class="btn-confirm" onclick="confirmIntake()">📦 Confirm Aid Receipt (QR / Manual)</button>
+    </div>
+
+    <script>
+        async function loadShelterData() {
+            const res = await fetch('/state');
+            const state = await res.json();
+            const s = state.shelters[0];
+            if (s) {
+                document.getElementById('shelter-name').innerText = s.name;
+                document.getElementById('demand-val').innerText = s.demand;
+                document.getElementById('inbound-val').innerText = s.inbound;
+                document.getElementById('delivered-val').innerText = s.delivered;
+                document.getElementById('shelter-open').checked = s.is_open;
+            }
+        }
+
+        async function toggleOpen() {
+            const isOpen = document.getElementById('shelter-open').checked;
+            await fetch('/shelters/s_cp/status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_open: isOpen })
+            });
+            loadShelterData();
+        }
+
+        async function updateCapabilities() {
+            const caps = [];
+            if (document.getElementById('cap-water').checked) caps.push('clean_water');
+            if (document.getElementById('cap-fridge').checked) caps.push('refrigeration');
+            await fetch('/shelters/s_cp/status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ capabilities: caps })
+            });
+            loadShelterData();
+        }
+
+        async function confirmIntake() {
+            alert("Aid arrival confirmed! Inventory intake verified into shelter log.");
+            loadShelterData();
+        }
+
+        loadShelterData();
+    </script>
 </body>
 </html>

@@ -3,11 +3,619 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ops Dashboard – Last-Mile Aid Dispatch</title>
+    <title>Ops Command Center — Last-Mile Aid Dispatch</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Leaflet.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --bg-dark: #070b14;
+            --surface: rgba(16, 24, 40, 0.85);
+            --surface-card: rgba(22, 34, 58, 0.75);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(56, 189, 248, 0.3);
+            --primary: #38bdf8;
+            --primary-glow: rgba(56, 189, 248, 0.4);
+            --accent-green: #10b981;
+            --accent-green-glow: rgba(16, 185, 129, 0.35);
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --accent-purple: #a855f7;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.06) 0px, transparent 50%);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Header Navigation */
+        header {
+            background: rgba(11, 17, 31, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 0.85rem 1.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-icon {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, #38bdf8, #6366f1);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            box-shadow: 0 0 15px var(--primary-glow);
+        }
+
+        .brand-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-badge {
+            font-size: 0.7rem;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            padding: 0.15rem 0.5rem;
+            border-radius: 9999px;
+            font-weight: 600;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .nav-btn {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            padding: 0.45rem 0.9rem;
+            border-radius: 8px;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .nav-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-btn.active {
+            color: var(--primary);
+            background: rgba(56, 189, 248, 0.1);
+            border-color: rgba(56, 189, 248, 0.25);
+        }
+
+        /* Top Bar: Clock & Scoreboard */
+        .metrics-banner {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            padding: 1.25rem 1.75rem 0.5rem 1.75rem;
+        }
+
+        .metric-card {
+            background: var(--surface-card);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--border-highlight);
+        }
+
+        .metric-header {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .metric-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            letter-spacing: -0.03em;
+        }
+
+        .metric-value.saved { color: var(--accent-green); text-shadow: 0 0 12px var(--accent-green-glow); }
+        .metric-value.lost { color: var(--accent-rose); }
+        .metric-value.time { color: var(--primary); }
+        .metric-value.reroutes { color: var(--accent-amber); }
+        .metric-value.safe { color: var(--accent-purple); }
+
+        /* Main Workspace Layout */
+        .workspace {
+            display: grid;
+            grid-template-columns: 1fr 420px;
+            gap: 1.25rem;
+            padding: 1.25rem 1.75rem;
+            flex: 1;
+        }
+
+        /* Map Section */
+        .map-container {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            min-height: 520px;
+        }
+
+        .panel-header {
+            padding: 0.85rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(15, 23, 42, 0.6);
+        }
+
+        .panel-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        #map {
+            flex: 1;
+            width: 100%;
+            min-height: 460px;
+            background: #090d16;
+        }
+
+        /* Scenario & Chaos Controls Bar */
+        .controls-bar {
+            padding: 0.75rem 1.25rem;
+            background: rgba(11, 17, 31, 0.95);
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            align-items: center;
+        }
+
+        .control-group-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-right: 0.25rem;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.45rem 0.8rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: var(--border-highlight);
+            transform: translateY(-1px);
+        }
+
+        .btn-scenario {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(99, 102, 241, 0.15));
+            border-color: rgba(56, 189, 248, 0.3);
+            color: #bae6fd;
+        }
+        .btn-scenario:hover {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.3), rgba(99, 102, 241, 0.3));
+            color: #fff;
+            box-shadow: 0 0 10px var(--primary-glow);
+        }
+
+        .btn-chaos {
+            background: rgba(244, 63, 94, 0.1);
+            border-color: rgba(244, 63, 94, 0.25);
+            color: #fda4af;
+        }
+        .btn-chaos:hover {
+            background: rgba(244, 63, 94, 0.25);
+            color: #fff;
+        }
+
+        /* Sidebar: "Why?" Decision Panel & Active Lots */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .panel-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            max-height: 480px;
+        }
+
+        .audit-feed {
+            padding: 0.75rem 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            flex: 1;
+        }
+
+        .audit-item {
+            background: var(--surface-card);
+            border-left: 3px solid var(--primary);
+            border-radius: 6px;
+            padding: 0.65rem 0.85rem;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .audit-item.alert { border-left-color: var(--accent-amber); }
+        .audit-item.danger { border-left-color: var(--accent-rose); }
+        .audit-item.success { border-left-color: var(--accent-green); }
+
+        .audit-time {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+            margin-bottom: 0.2rem;
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Clock Banner in Header */
+        .clock-display {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            padding: 0.35rem 0.85rem;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+        }
+        .clock-pulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+    </style>
 </head>
 <body>
-    <!-- Ops dashboard: live Leaflet map, color-coded rider health -->
-    <!-- Countdown timers, "Why?" panel, chaos buttons, simulated-clock controls -->
-    <!-- Scoreboard -->
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon">⚡</div>
+            <div>
+                <span class="brand-title">Last-Mile Aid</span>
+                <span class="brand-badge">Ops Engine</span>
+            </div>
+        </div>
+
+        <div class="clock-display">
+            <span class="clock-pulse"></span>
+            <span>SIM TIME: <strong id="sim-clock-val" style="color:#38bdf8;">t = 0.0m</strong></span>
+            <span style="color:#64748b;">|</span>
+            <span id="speed-label" style="color:#a855f7;">1× Speed</span>
+        </div>
+
+        <nav class="nav-links">
+            <a href="/ops" class="nav-btn active">Ops Command</a>
+            <a href="/donor" class="nav-btn">Donor View</a>
+            <a href="/rider" class="nav-btn">Rider Courier</a>
+            <a href="/shelter" class="nav-btn">Shelter Portal</a>
+        </nav>
+    </header>
+
+    <!-- Scoreboard Metrics Header -->
+    <section class="metrics-banner">
+        <div class="metric-card">
+            <div class="metric-header">Meals Rescued</div>
+            <div class="metric-value saved" id="metric-saved">0</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-header">Lost / Spoiled</div>
+            <div class="metric-value lost" id="metric-lost">0</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-header">Ghost-Min Eliminated</div>
+            <div class="metric-value time" id="metric-ghost">0m</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-header">Live Reroutes</div>
+            <div class="metric-value reroutes" id="metric-reroutes">0</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-header">Unsafe Blocked</div>
+            <div class="metric-value safe" id="metric-safe">0</div>
+        </div>
+    </section>
+
+    <!-- Main Workspace: Live Map & Decision Console -->
+    <main class="workspace">
+        <div class="map-container">
+            <div class="panel-header">
+                <span class="panel-title">📍 Live Spatial Dispatch Grid (Delhi NCR)</span>
+                <div style="font-size:0.8rem; color:#94a3b8; display:flex; gap:1rem;">
+                    <span>🟢 Donor</span>
+                    <span>🔵 Shelter (Open)</span>
+                    <span>⚪ Shelter (Closed)</span>
+                    <span>🛵 Courier</span>
+                </div>
+            </div>
+
+            <!-- Leaflet Map Container -->
+            <div id="map"></div>
+
+            <!-- 1-Click Scenario Runner -->
+            <div class="controls-bar">
+                <span class="control-group-title">🎯 1-Click Scenarios:</span>
+                <button class="btn btn-scenario" onclick="runScenario(1)">1. Banquet Rush</button>
+                <button class="btn btn-scenario" onclick="runScenario(2)">2. Ghost Rider</button>
+                <button class="btn btn-scenario" onclick="runScenario(3)">3. Pulled Rug</button>
+                <button class="btn btn-scenario" onclick="runScenario(4)">4. Unsafe Match</button>
+                <button class="btn btn-scenario" onclick="runScenario(5)">5. Vanishing Rider</button>
+            </div>
+
+            <!-- Chaos Console -->
+            <div class="controls-bar" style="background: rgba(15, 23, 42, 0.98);">
+                <span class="control-group-title" style="color:#fda4af;">🔥 Chaos Engine:</span>
+                <button class="btn btn-chaos" onclick="triggerChaos('traffic')">🚗 Traffic Surge (2x)</button>
+                <button class="btn btn-chaos" onclick="triggerChaos('kill_rider')">💀 Kill Rider Ping</button>
+                <button class="btn btn-chaos" onclick="triggerChaos('close_shelter')">🚪 Close Shelter CP</button>
+                <button class="btn btn-chaos" onclick="triggerChaos('citizen_drop')">🍲 Citizen Food Drop</button>
+                <button class="btn" style="margin-left:auto;" onclick="advanceClock(5)">⏱️ +5 min</button>
+                <button class="btn" onclick="advanceClock(15)">⏱️ +15 min</button>
+            </div>
+        </div>
+
+        <!-- Sidebar: "Why?" Decision Explanation Feed -->
+        <aside class="sidebar">
+            <div class="panel-box" style="flex: 1;">
+                <div class="panel-header">
+                    <span class="panel-title">🧠 "Why?" Decision Panel</span>
+                    <span style="font-size:0.75rem; color:#38bdf8;">Real-Time AI Core</span>
+                </div>
+                <div class="audit-feed" id="audit-feed">
+                    <div class="audit-item success">
+                        <span class="audit-time">SYSTEM BOOT</span>
+                        Last-Mile Aid Dispatch Engine initialized. Deterministic replay and event-sourced core online.
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize Leaflet Map centered on Delhi Connaught Place
+        const map = L.map('map').setView([28.6250, 77.2100], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            subdomains: 'abcd',
+            maxZoom: 19
+        }).addTo(map);
+
+        let mapMarkers = {};
+
+        // WebSocket Connection
+        const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${wsProto}//${window.location.host}/ws`);
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'initial_state') {
+                renderFullState(data.data);
+            } else {
+                appendAuditEvent(data);
+                refreshState();
+            }
+        };
+
+        async function refreshState() {
+            try {
+                const res = await fetch('/state');
+                const state = await res.json();
+                renderFullState(state);
+            } catch(e) {
+                console.error(e);
+            }
+        }
+
+        function renderFullState(state) {
+            // Update clock
+            document.getElementById('sim-clock-val').innerText = `t = ${state.clock_minutes}m`;
+            document.getElementById('speed-label').innerText = `${state.clock_multiplier}× Speed`;
+
+            // Update scoreboard
+            const sb = state.scoreboard;
+            document.getElementById('metric-saved').innerText = sb.meals_saved;
+            document.getElementById('metric-lost').innerText = sb.meals_lost;
+            document.getElementById('metric-ghost').innerText = `${sb.ghost_minutes_eliminated}m`;
+            document.getElementById('metric-reroutes').innerText = sb.reroutes_completed;
+            document.getElementById('metric-safe').innerText = sb.unsafe_matches_blocked;
+
+            // Clear old markers
+            Object.values(mapMarkers).forEach(m => map.removeLayer(m));
+            mapMarkers = {};
+
+            // Render Shelters
+            state.shelters.forEach(s => {
+                const color = s.is_open ? '#38bdf8' : '#64748b';
+                const circle = L.circleMarker([s.lat, s.lon], {
+                    radius: 10,
+                    fillColor: color,
+                    color: '#fff',
+                    weight: 2,
+                    fillOpacity: 0.85
+                }).addTo(map);
+                circle.bindPopup(`<b>${s.name}</b><br>Demand: ${s.demand}<br>Inbound: ${s.inbound}<br>Status: ${s.is_open ? 'OPEN' : 'CLOSED'}`);
+                mapMarkers[`shelter_${s.id}`] = circle;
+            });
+
+            // Render Riders
+            state.riders.forEach(r => {
+                let color = '#10b981'; // available
+                if (r.status === 'silent_yellow') color = '#f59e0b';
+                if (r.status === 'silent_red') color = '#f43f5e';
+                if (r.status === 'busy') color = '#a855f7';
+
+                const marker = L.circleMarker([r.lat, r.lon], {
+                    radius: 8,
+                    fillColor: color,
+                    color: '#ffffff',
+                    weight: 1.5,
+                    fillOpacity: 0.95
+                }).addTo(map);
+                marker.bindPopup(`<b>🛵 ${r.name}</b><br>Capacity: ${r.capacity}<br>Status: ${r.status}`);
+                mapMarkers[`rider_${r.id}`] = marker;
+            });
+
+            // Render Donors/Batches
+            state.batches.forEach(b => {
+                const marker = L.circleMarker([b.donor_lat, b.donor_lon], {
+                    radius: 9,
+                    fillColor: '#f59e0b',
+                    color: '#fff',
+                    weight: 2,
+                    fillOpacity: 0.9
+                }).addTo(map);
+                marker.bindPopup(`<b>🍲 Batch: ${b.item}</b><br>Quantity: ${b.quantity} meals<br>Expiry: ${b.expiry_minutes}m`);
+                mapMarkers[`batch_${b.id}`] = marker;
+            });
+        }
+
+        function appendAuditEvent(ev) {
+            const feed = document.getElementById('audit-feed');
+            const item = document.createElement('div');
+            item.className = 'audit-item';
+
+            if (ev.type.includes('chaos') || ev.type.includes('expired') || ev.type.includes('lost')) {
+                item.classList.add('danger');
+            } else if (ev.type.includes('reroute') || ev.type.includes('alert')) {
+                item.classList.add('alert');
+            } else {
+                item.classList.add('success');
+            }
+
+            const timeStr = new Date(ev.timestamp).toLocaleTimeString();
+            item.innerHTML = `
+                <span class="audit-time">[${timeStr}] ${ev.type.toUpperCase()}</span>
+                ${ev.reason || JSON.stringify(ev.payload)}
+            `;
+            feed.insertBefore(item, feed.firstChild);
+        }
+
+        // Action Handlers
+        async function runScenario(id) {
+            const res = await fetch(`/scenarios/${id}/run`, { method: 'POST' });
+            const data = await res.json();
+            appendAuditEvent({
+                type: `SCENARIO_${id}_TRIGGERED`,
+                timestamp: new Date().toISOString(),
+                reason: data.message
+            });
+            refreshState();
+        }
+
+        async function triggerChaos(action) {
+            const res = await fetch(`/chaos/${action}`, { method: 'POST' });
+            const data = await res.json();
+            refreshState();
+        }
+
+        async function advanceClock(min) {
+            await fetch('/clock/advance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ minutes: min })
+            });
+            refreshState();
+        }
+
+        // Initial fetch
+        refreshState();
+    </script>
 </body>
 </html>

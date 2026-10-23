@@ -3,10 +3,197 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rider – Last-Mile Aid Dispatch</title>
+    <title>Courier App — Last-Mile Aid Dispatch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #070b14;
+            --surface: rgba(16, 24, 40, 0.95);
+            --surface-card: rgba(22, 34, 58, 0.85);
+            --border: rgba(255, 255, 255, 0.1);
+            --primary: #38bdf8;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg-dark);
+            color: #f1f5f9;
+            font-family: var(--font-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem;
+        }
+        .rider-card {
+            max-width: 440px;
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.85rem;
+        }
+        .timer-box {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .timer-val {
+            font-family: var(--font-mono);
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--accent-amber);
+            letter-spacing: -0.02em;
+        }
+        .btn-action {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: 10px;
+            font-family: var(--font-main);
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        .btn-accept { background: #38bdf8; color: #000; }
+        .btn-pickup { background: #10b981; color: #000; }
+        .btn-deliver { background: #6366f1; color: #fff; }
+        .btn-release { background: rgba(255,255,255,0.08); color: #fda4af; border: 1px solid rgba(244,63,94,0.3); }
+        .btn-ping { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+    </style>
 </head>
 <body>
-    <!-- Rider page: Accept/Picked-up/Delivered/Release buttons -->
-    <!-- Live route on Leaflet map, visible lease timer, browser Geolocation -->
+    <div class="rider-card">
+        <div class="header">
+            <div>
+                <h2 style="font-size:1.15rem;">🛵 Courier Active Terminal</h2>
+                <span id="rider-name" style="font-size:0.8rem; color:#94a3b8;">Rider: Aarav (Bicycle)</span>
+            </div>
+            <a href="/ops" style="font-size:0.8rem; color:#38bdf8; text-decoration:none;">Ops Map →</a>
+        </div>
+
+        <!-- Active Claim & Lease Timer -->
+        <div class="timer-box">
+            <div style="font-size:0.75rem; text-transform:uppercase; color:#94a3b8;">Active Lease Countdown</div>
+            <div class="timer-val" id="lease-timer">08:00</div>
+            <div style="font-size:0.75rem; color:#94a3b8;" id="lease-status">Claim active. Heartbeats required.</div>
+        </div>
+
+        <!-- Cargo Details -->
+        <div style="background:rgba(255,255,255,0.04); padding:0.85rem; border-radius:10px; font-size:0.85rem;">
+            <div><b>Assigned Cargo:</b> <span id="cargo-name">40 meals (Vegetarian Curry)</span></div>
+            <div style="margin-top:0.35rem;"><b>Destination:</b> <span id="dest-name" style="color:#38bdf8;">Connaught Place Shelter</span></div>
+        </div>
+
+        <!-- Courier Action Buttons -->
+        <button class="btn-action btn-accept" id="btn-accept" onclick="acceptClaim()">✅ Accept Claim (Start Lease)</button>
+        <button class="btn-action btn-pickup" id="btn-pickup" onclick="markPickup()">📦 Confirm Food Picked Up</button>
+        <button class="btn-action btn-deliver" id="btn-deliver" onclick="markDelivered()">🏁 Confirm Safe Delivery</button>
+        <button class="btn-action btn-release" id="btn-release" onclick="releaseEarly()">↩️ Release Claim (Penalty-Free)</button>
+        <button class="btn-action btn-ping" onclick="sendHeartbeat()">📡 Send Live GPS Heartbeat</button>
+    </div>
+
+    <script>
+        let currentLotId = null;
+        let leaseSecondsLeft = 480;
+        let timerInterval = null;
+
+        async function fetchState() {
+            const res = await fetch('/state');
+            const state = await res.json();
+            if (state.lots && state.lots.length > 0) {
+                const myLot = state.lots[0];
+                currentLotId = myLot.id;
+                document.getElementById('cargo-name').innerText = `${myLot.quantity} meals`;
+            }
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (leaseSecondsLeft > 0) {
+                    leaseSecondsLeft--;
+                    const m = Math.floor(leaseSecondsLeft / 60).toString().padStart(2, '0');
+                    const s = (leaseSecondsLeft % 60).toString().padStart(2, '0');
+                    document.getElementById('lease-timer').innerText = `${m}:${s}`;
+                } else {
+                    document.getElementById('lease-timer').innerText = "EXPIRED";
+                    document.getElementById('lease-status').innerText = "Lease expired! Reassigned to standby courier.";
+                }
+            }, 1000);
+        }
+
+        async function acceptClaim() {
+            if (!currentLotId) await fetchState();
+            await fetch(`/lots/${currentLotId}/accept`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rider_id: 'r_aarav' })
+            });
+            document.getElementById('lease-status').innerText = "Lease started. Head to donor location!";
+            startTimer();
+        }
+
+        async function markPickup() {
+            if (!currentLotId) return;
+            await fetch(`/lots/${currentLotId}/picked-up`, { method: 'POST' });
+            document.getElementById('lease-status').innerText = "Cargo on board. Deliver to shelter!";
+        }
+
+        async function markDelivered() {
+            if (!currentLotId) return;
+            await fetch(`/lots/${currentLotId}/delivered`, { method: 'POST' });
+            clearInterval(timerInterval);
+            document.getElementById('lease-timer').innerText = "DELIVERED";
+            document.getElementById('lease-status').innerText = "Safely delivered! Scoreboard updated.";
+        }
+
+        async function releaseEarly() {
+            if (!currentLotId) return;
+            await fetch(`/lots/${currentLotId}/release`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rider_id: 'r_aarav' })
+            });
+            clearInterval(timerInterval);
+            document.getElementById('lease-timer').innerText = "RELEASED";
+            document.getElementById('lease-status').innerText = "Released penalty-free. Standby courier takes over.";
+        }
+
+        async function sendHeartbeat() {
+            await fetch('/riders/r_aarav/ping', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lat: 28.6180, lon: 77.2100 })
+            });
+            alert("Live GPS Heartbeat sent to Ops Engine!");
+        }
+
+        fetchState();
+    </script>
 </body>
 </html>
