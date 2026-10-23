@@ -90,17 +90,18 @@ def calculate_chunk_slack(
         batch.donor_lat, batch.donor_lon,
         traffic_multiplier=traffic_multiplier,
     )
-    pickup_time = max(now_minutes, rider.free_at_minutes) + eta_to_batch
-
+    rider_wait = max(rider.free_at_minutes - now_minutes, 0.0)
     eta_to_shelter = travel_time_minutes(
         batch.donor_lat, batch.donor_lon,
         shelter.lat, shelter.lon,
         traffic_multiplier=traffic_multiplier,
     )
-    drop_time = pickup_time + loading_minutes + eta_to_shelter
+    trip_duration = rider_wait + eta_to_batch + loading_minutes + eta_to_shelter
 
+    batch_created = getattr(batch, "created_at_minutes", 0.0)
+    elapsed_minutes = max(now_minutes - batch_created, 0.0)
     effective_expiry = batch.expiry_minutes - batch.serve_buffer_minutes
-    return effective_expiry - drop_time
+    return effective_expiry - elapsed_minutes - trip_duration
 
 
 def calculate_rescue_plan(
@@ -181,7 +182,9 @@ def calculate_rescue_plan(
             shelter.lat, shelter.lon,
             traffic_multiplier=traffic_multiplier,
         )
-        pnr_min = max(batch.expiry_minutes - 5.0 - eta_to_shelter, 0.0)
+        batch_created = getattr(batch, "created_at_minutes", 0.0)
+        elapsed_min = max(now_minutes - batch_created, 0.0)
+        pnr_min = max(batch.expiry_minutes - elapsed_min - 5.0 - eta_to_shelter, 0.0)
 
         chunks.append(ChunkPlan(
             rider_id=rider.id,
@@ -270,6 +273,9 @@ class Dispatcher:
         Calculates the rescue plan, emits surge broadcast if short,
         and creates Lot objects for the rescuable chunks.
         """
+        if getattr(batch, "created_at_minutes", 0.0) == 0.0 and now_minutes > 0.0:
+            batch.created_at_minutes = now_minutes
+
         self.batches[batch.id] = batch
         self.event_log.append(
             "batch_created",

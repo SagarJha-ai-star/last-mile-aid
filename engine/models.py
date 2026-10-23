@@ -63,6 +63,7 @@ class Batch:
     donor_lat: float = 0.0
     donor_lon: float = 0.0
     created_at: Optional[datetime] = None
+    created_at_minutes: float = 0.0
     tags: list[str] = field(default_factory=list)  # e.g. ["infant_formula"]
     serve_buffer_minutes: float = 0.0
     units_left: int = 0

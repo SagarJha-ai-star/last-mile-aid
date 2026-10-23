@@ -309,6 +309,7 @@ def create_batch(req: CreateBatchRequest):
         item=req.item,
         quantity=req.quantity,
         expiry_minutes=req.expiry_minutes,
+        created_at_minutes=sim_clock.current_minutes,
         donor_lat=req.donor_lat,
         donor_lon=req.donor_lon,
         tags=req.tags,

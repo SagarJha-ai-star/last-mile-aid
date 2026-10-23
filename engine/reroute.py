@@ -96,7 +96,8 @@ def compute_fallback_chain(
             s.lat, s.lon,
             traffic_multiplier=traffic_multiplier,
         )
-        slack = effective_expiry - (now_minutes + eta)
+        elapsed_min = max(now_minutes - getattr(cargo_batch, "created_at_minutes", 0.0), 0.0)
+        slack = effective_expiry - elapsed_min - eta
         if slack >= 0:
             chain.append(FallbackOption(
                 shelter_id=s.id,
