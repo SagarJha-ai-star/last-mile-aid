@@ -218,6 +218,10 @@
             background: #090d16;
         }
 
+        .leaflet-tile {
+            filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+        }
+
         /* Scenario & Chaos Controls Bar */
         .controls-bar {
             padding: 0.75rem 1.25rem;
@@ -471,10 +475,9 @@
     <script>
         // Initialize Leaflet Map centered on Delhi Connaught Place
         const map = L.map('map').setView([28.6250, 77.2100], 13);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-            subdomains: 'abcd',
-            maxZoom: 19
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" style="color:#64748b;">OpenStreetMap</a> contributors'
         }).addTo(map);
 
         let mapMarkers = {};
