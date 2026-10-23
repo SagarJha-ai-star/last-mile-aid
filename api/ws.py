@@ -1,0 +1,3 @@
+"""
+WebSocket event broadcaster.
+"""
