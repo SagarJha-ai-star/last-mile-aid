@@ -637,6 +637,40 @@
                     chipsContainer.appendChild(chip);
                 });
             }
+
+            // Clear old route polylines
+            if (window.activeRouteLines) {
+                window.activeRouteLines.forEach(l => map.removeLayer(l));
+            }
+            window.activeRouteLines = [];
+
+            // Draw Live Active Route Polylines for each assigned or picked-up lot
+            state.lots.forEach(lot => {
+                if (lot.state === 'assigned' || lot.state === 'picked_up') {
+                    const rider = state.riders.find(r => r.id === lot.assigned_rider_id);
+                    const batch = state.batches.find(b => b.id === lot.batch_id);
+                    const shelter = state.shelters.find(s => s.id === lot.target_shelter_id);
+
+                    if (rider && shelter) {
+                        const points = [[rider.lat, rider.lon]];
+                        if (lot.state === 'assigned' && batch) {
+                            points.push([batch.donor_lat, batch.donor_lon]);
+                        }
+                        points.push([shelter.lat, shelter.lon]);
+
+                        const lineColor = lot.state === 'assigned' ? '#38bdf8' : '#a855f7';
+                        const line = L.polyline(points, {
+                            color: lineColor,
+                            weight: 3.5,
+                            opacity: 0.85,
+                            dashArray: lot.state === 'assigned' ? '6, 6' : null
+                        }).addTo(map);
+
+                        line.bindTooltip(`🛵 ${rider.name} → 🏠 ${shelter.name} (${lot.quantity} meals)`, { sticky: true });
+                        window.activeRouteLines.push(line);
+                    }
+                }
+            });
         }
 
         function appendAuditEvent(ev) {

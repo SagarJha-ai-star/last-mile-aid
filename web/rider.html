@@ -3,197 +3,670 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Courier App — Last-Mile Aid Dispatch</title>
+    <title>Courier Portal — Last-Mile Aid Dispatch</title>
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         :root {
             --bg-dark: #070b14;
-            --surface: rgba(16, 24, 40, 0.95);
+            --surface: rgba(16, 24, 40, 0.9);
             --surface-card: rgba(22, 34, 58, 0.85);
             --border: rgba(255, 255, 255, 0.1);
+            --border-highlight: rgba(56, 189, 248, 0.4);
             --primary: #38bdf8;
+            --primary-glow: rgba(56, 189, 248, 0.4);
             --accent-green: #10b981;
             --accent-amber: #f59e0b;
             --accent-rose: #f43f5e;
+            --accent-purple: #a855f7;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
             --font-main: 'Outfit', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
         }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            background: var(--bg-dark);
-            color: #f1f5f9;
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.06) 0px, transparent 50%);
+            color: var(--text-main);
             font-family: var(--font-main);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            padding: 1rem;
         }
-        .rider-card {
-            max-width: 440px;
-            width: 100%;
-            background: var(--surface);
+
+        header {
+            background: rgba(11, 17, 31, 0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 0.85rem 1.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+        }
+
+        .rider-selector-group {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            background: rgba(255,255,255,0.06);
             border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.5rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 10px;
+        }
+
+        select.rider-select {
+            background: transparent;
+            border: none;
+            color: var(--primary);
+            font-family: var(--font-main);
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            outline: none;
+        }
+        select.rider-select option {
+            background: #0f172a;
+            color: #fff;
+        }
+
+        /* Layout */
+        .workspace {
+            display: grid;
+            grid-template-columns: 460px 1fr;
+            gap: 1.25rem;
+            padding: 1.25rem 1.75rem;
+            flex: 1;
+        }
+
+        @media (max-width: 960px) {
+            .workspace { grid-template-columns: 1fr; }
+        }
+
+        /* Terminal Column */
+        .terminal-panel {
             display: flex;
             flex-direction: column;
             gap: 1.25rem;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        .header {
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.25rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .rider-profile-bar {
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            justify-content: space-between;
             border-bottom: 1px solid var(--border);
             padding-bottom: 0.85rem;
+            margin-bottom: 0.85rem;
         }
-        .timer-box {
-            background: rgba(0,0,0,0.4);
+
+        .rider-avatar {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.35rem;
+            border: 2px solid #fff;
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+        }
+
+        .timer-container {
+            background: rgba(0, 0, 0, 0.45);
             border: 1px solid rgba(245, 158, 11, 0.4);
             border-radius: 12px;
             padding: 1rem;
             text-align: center;
+            margin-bottom: 1rem;
+            position: relative;
+            overflow: hidden;
         }
+
+        .timer-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
         .timer-val {
             font-family: var(--font-mono);
             font-size: 2.25rem;
             font-weight: 700;
             color: var(--accent-amber);
+            margin: 0.25rem 0;
             letter-spacing: -0.02em;
         }
+
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        .badge-ready { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-busy { background: rgba(168, 85, 247, 0.15); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3); }
+        .badge-warn { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-lost { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        /* Order Details */
+        .order-card {
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+        }
+
+        .order-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Action Buttons */
+        .actions-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
         .btn-action {
             width: 100%;
-            padding: 1rem;
-            border: none;
+            padding: 0.85rem;
             border-radius: 10px;
             font-family: var(--font-main);
-            font-size: 1.1rem;
+            font-size: 0.95rem;
             font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s;
+            border: none;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
+            transition: all 0.2s;
         }
-        .btn-accept { background: #38bdf8; color: #000; }
-        .btn-pickup { background: #10b981; color: #000; }
-        .btn-deliver { background: #6366f1; color: #fff; }
-        .btn-release { background: rgba(255,255,255,0.08); color: #fda4af; border: 1px solid rgba(244,63,94,0.3); }
-        .btn-ping { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+        .btn-action:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.1); }
+        .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-accept { background: linear-gradient(135deg, #38bdf8, #0284c7); color: #000; box-shadow: 0 0 15px rgba(56,189,248,0.3); }
+        .btn-pickup { background: linear-gradient(135deg, #10b981, #059669); color: #000; box-shadow: 0 0 15px rgba(16,185,129,0.3); }
+        .btn-deliver { background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: #fff; box-shadow: 0 0 15px rgba(139,92,246,0.3); }
+        .btn-release { background: rgba(244, 63, 94, 0.1); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.3); }
+        .btn-ping { background: rgba(255, 255, 255, 0.06); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.2); }
+
+        /* Map Section */
+        .map-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            min-height: 520px;
+        }
+
+        .map-header {
+            padding: 0.85rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.6);
+        }
+
+        #rider-map {
+            flex: 1;
+            width: 100%;
+            min-height: 480px;
+            background: #090d16;
+        }
+
+        .leaflet-tile {
+            filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+        }
     </style>
 </head>
 <body>
-    <div class="rider-card">
-        <div class="header">
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon">🛵</div>
             <div>
-                <h2 style="font-size:1.15rem;">🛵 Courier Active Terminal</h2>
-                <span id="rider-name" style="font-size:0.8rem; color:#94a3b8;">Rider: Aarav (Bicycle)</span>
+                <span style="font-size: 1.15rem; font-weight: 700;">Courier Terminal</span>
+                <span style="font-size: 0.7rem; color: #10b981; font-weight: 600; margin-left: 0.35rem;">LIVE COURIER OS</span>
             </div>
-            <a href="/ops" style="font-size:0.8rem; color:#38bdf8; text-decoration:none;">Ops Map →</a>
         </div>
 
-        <!-- Active Claim & Lease Timer -->
-        <div class="timer-box">
-            <div style="font-size:0.75rem; text-transform:uppercase; color:#94a3b8;">Active Lease Countdown</div>
-            <div class="timer-val" id="lease-timer">08:00</div>
-            <div style="font-size:0.75rem; color:#94a3b8;" id="lease-status">Claim active. Heartbeats required.</div>
+        <!-- Rider Profile Selector -->
+        <div class="rider-selector-group">
+            <span style="font-size:0.75rem; color:#94a3b8; font-weight:600;">ACTIVE PROFILE:</span>
+            <select class="rider-select" id="rider-select" onchange="switchRider(this.value)">
+                <option value="r_aarav">Aarav (Bicycle · 40 cap)</option>
+                <option value="r_priya">Priya (Scooter · 40 cap)</option>
+                <option value="r_vikram">Vikram (Motorcycle · 40 cap)</option>
+                <option value="r_rohan">Rohan (Standby · 40 cap)</option>
+            </select>
         </div>
 
-        <!-- Cargo Details -->
-        <div style="background:rgba(255,255,255,0.04); padding:0.85rem; border-radius:10px; font-size:0.85rem;">
-            <div><b>Assigned Cargo:</b> <span id="cargo-name">40 meals (Vegetarian Curry)</span></div>
-            <div style="margin-top:0.35rem;"><b>Destination:</b> <span id="dest-name" style="color:#38bdf8;">Connaught Place Shelter</span></div>
+        <a href="/ops" style="font-size: 0.85rem; color: var(--primary); text-decoration: none; font-weight: 600;">← Ops Command Center</a>
+    </header>
+
+    <main class="workspace">
+        <!-- Courier Action Terminal -->
+        <div class="terminal-panel">
+            <div class="card">
+                <div class="rider-profile-bar">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div class="rider-avatar" id="avatar-icon">🛵</div>
+                        <div>
+                            <div style="font-size: 1.05rem; font-weight: 700;" id="profile-name">Aarav</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);" id="profile-vehicle">Vehicle: Bicycle · Max Load: 40 meals</div>
+                        </div>
+                    </div>
+                    <span class="status-badge badge-ready" id="status-pill">Ready</span>
+                </div>
+
+                <!-- Adaptive Lease Timer Countdown -->
+                <div class="timer-container" id="timer-box">
+                    <div class="timer-label">Lease Expiration Countdown</div>
+                    <div class="timer-val" id="timer-countdown">--:--</div>
+                    <div style="font-size: 0.75rem; color: #94a3b8;" id="timer-status">Waiting for dispatch allocation...</div>
+                </div>
+
+                <!-- Assigned / Available Mission Details -->
+                <div class="order-card" id="order-box">
+                    <div class="order-row">
+                        <span style="color:var(--text-muted);">Assigned Mission:</span>
+                        <strong id="order-item" style="color:var(--primary);">No Active Mission</strong>
+                    </div>
+                    <div class="order-row">
+                        <span style="color:var(--text-muted);">Cargo Payload:</span>
+                        <strong id="order-quantity">0 meals</strong>
+                    </div>
+                    <div class="order-row">
+                        <span style="color:var(--text-muted);">Pickup Donor:</span>
+                        <span id="order-donor">Central Delhi Banquet</span>
+                    </div>
+                    <div class="order-row">
+                        <span style="color:var(--text-muted);">Drop-off Shelter:</span>
+                        <strong id="order-shelter" style="color:#38bdf8;">Connaught Place Shelter</strong>
+                    </div>
+                    <div class="order-row">
+                        <span style="color:var(--text-muted);">Calculated Slack:</span>
+                        <span id="order-slack" style="color:#10b981; font-weight:700;">--</span>
+                    </div>
+                </div>
+
+                <!-- Courier Action Control Stack -->
+                <div class="actions-stack">
+                    <button class="btn-action btn-accept" id="btn-accept" onclick="acceptLot()">
+                        ⚡ 1. Accept Claim (Start Adaptive Lease)
+                    </button>
+                    <button class="btn-action btn-pickup" id="btn-pickup" onclick="markPickup()" disabled>
+                        📦 2. Confirm Food Picked Up (In Transit)
+                    </button>
+                    <button class="btn-action btn-deliver" id="btn-deliver" onclick="markDelivered()" disabled>
+                        🏁 3. Confirm Safe Delivery to Shelter
+                    </button>
+                    <button class="btn-action btn-release" id="btn-release" onclick="releaseEarly()" disabled>
+                        ↩️ Release Claim Early (Penalty-Free Standby Transfer)
+                    </button>
+                    <button class="btn-action btn-ping" onclick="sendPing()">
+                        📡 Send Live GPS Heartbeat Ping
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <!-- Courier Action Buttons -->
-        <button class="btn-action btn-accept" id="btn-accept" onclick="acceptClaim()">✅ Accept Claim (Start Lease)</button>
-        <button class="btn-action btn-pickup" id="btn-pickup" onclick="markPickup()">📦 Confirm Food Picked Up</button>
-        <button class="btn-action btn-deliver" id="btn-deliver" onclick="markDelivered()">🏁 Confirm Safe Delivery</button>
-        <button class="btn-action btn-release" id="btn-release" onclick="releaseEarly()">↩️ Release Claim (Penalty-Free)</button>
-        <button class="btn-action btn-ping" onclick="sendHeartbeat()">📡 Send Live GPS Heartbeat</button>
-    </div>
+        <!-- Live Courier Navigation & Route Map -->
+        <div class="map-card">
+            <div class="map-header">
+                <span style="font-size: 0.95rem; font-weight: 700; display:flex; align-items:center; gap:0.5rem;">
+                    🗺️ Turn-by-Turn Route Navigation
+                </span>
+                <span id="route-indicator" style="font-size: 0.75rem; color: #10b981; font-weight: 700;">
+                    LIVE GPS LOCK
+                </span>
+            </div>
+            <div id="rider-map"></div>
+        </div>
+    </main>
 
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        let currentLotId = null;
-        let leaseSecondsLeft = 480;
-        let timerInterval = null;
+        // Parse rider ID from URL or default to r_aarav
+        const urlParams = new URLSearchParams(window.location.search);
+        let currentRiderId = urlParams.get('id') || 'r_aarav';
+        document.getElementById('rider-select').value = currentRiderId;
 
-        async function fetchState() {
-            const res = await fetch('/state');
-            const state = await res.json();
-            if (state.lots && state.lots.length > 0) {
-                const myLot = state.lots[0];
-                currentLotId = myLot.id;
-                document.getElementById('cargo-name').innerText = `${myLot.quantity} meals`;
+        // Initialize Leaflet Map
+        const map = L.map('rider-map').setView([28.6250, 77.2100], 14);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+
+        let mapLayers = {
+            riderMarker: null,
+            donorMarker: null,
+            shelterMarker: null,
+            routeLine: null
+        };
+
+        let currentActiveLot = null;
+        let leaseTimer = null;
+        let leaseSecondsLeft = 0;
+
+        function switchRider(newId) {
+            currentRiderId = newId;
+            window.history.replaceState(null, null, `?id=${newId}`);
+            fetchRiderData();
+        }
+
+        // WebSocket Connection for Sub-second Updates
+        const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${wsProto}//${window.location.host}/ws`);
+        socket.onmessage = () => fetchRiderData();
+
+        async function fetchRiderData() {
+            try {
+                const res = await fetch('/state');
+                const state = await res.json();
+                renderRiderView(state);
+            } catch (e) {
+                console.error(e);
             }
         }
 
-        function startTimer() {
-            clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
+        function renderRiderView(state) {
+            const rider = state.riders.find(r => r.id === currentRiderId);
+            if (!rider) return;
+
+            // Profile info
+            document.getElementById('profile-name').innerText = rider.name;
+            document.getElementById('profile-vehicle').innerText = `Max Load: ${rider.capacity} meals · Reliability: ${(rider.reliability * 100).toFixed(0)}%`;
+
+            // Status Pill
+            const statusPill = document.getElementById('status-pill');
+            if (rider.status === 'available') {
+                statusPill.className = 'status-badge badge-ready';
+                statusPill.innerText = '🟢 Ready';
+            } else if (rider.status === 'busy') {
+                statusPill.className = 'status-badge badge-busy';
+                statusPill.innerText = '🟣 In Transit';
+            } else if (rider.status === 'silent_yellow') {
+                statusPill.className = 'status-badge badge-warn';
+                statusPill.innerText = '🟡 Warning (Heartbeat Missed)';
+            } else if (rider.status === 'silent_red') {
+                statusPill.className = 'status-badge badge-lost';
+                statusPill.innerText = '🔴 Declared Lost';
+            }
+
+            // Find lot assigned to this rider OR first pending lot targeting this rider's capacity
+            let myLot = state.lots.find(l => l.assigned_rider_id === rider.id && l.state !== 'delivered' && l.state !== 'lost');
+            if (!myLot && rider.status === 'available') {
+                myLot = state.lots.find(l => l.state === 'pending');
+            }
+
+            currentActiveLot = myLot;
+            updateMissionCard(myLot, state, rider);
+            updateMapRoute(myLot, state, rider);
+        }
+
+        function updateMissionCard(lot, state, rider) {
+            const btnAccept = document.getElementById('btn-accept');
+            const btnPickup = document.getElementById('btn-pickup');
+            const btnDeliver = document.getElementById('btn-deliver');
+            const btnRelease = document.getElementById('btn-release');
+
+            if (!lot) {
+                document.getElementById('order-item').innerText = "No Pending Missions";
+                document.getElementById('order-quantity').innerText = "0 meals";
+                document.getElementById('timer-status').innerText = "All donations cleared. Standing by.";
+                document.getElementById('timer-countdown').innerText = "--:--";
+                btnAccept.disabled = true;
+                btnPickup.disabled = true;
+                btnDeliver.disabled = true;
+                btnRelease.disabled = true;
+                return;
+            }
+
+            const batch = state.batches.find(b => b.id === lot.batch_id);
+            const shelter = state.shelters.find(s => s.id === lot.target_shelter_id);
+
+            document.getElementById('order-item').innerText = batch ? batch.item : "Prepared Food Surplus";
+            document.getElementById('order-quantity').innerText = `${lot.quantity} meals`;
+            document.getElementById('order-donor').innerText = batch ? `Donor [${batch.donor_lat.toFixed(4)}, ${batch.donor_lon.toFixed(4)}]` : "Donor Site";
+            document.getElementById('order-shelter').innerText = shelter ? `${shelter.name}` : "Assigned Shelter";
+            document.getElementById('order-slack').innerText = batch ? `${batch.expiry_minutes}m Expiry Window` : "Feasible";
+
+            // State-based Action Buttons & Timer
+            if (lot.state === 'pending') {
+                document.getElementById('timer-status').innerText = "Mission available. Click Accept to start lease.";
+                document.getElementById('timer-countdown').innerText = "READY";
+                btnAccept.disabled = false;
+                btnPickup.disabled = true;
+                btnDeliver.disabled = true;
+                btnRelease.disabled = true;
+            } else if (lot.state === 'assigned') {
+                document.getElementById('timer-status').innerText = "Lease active. Proceed to donor for pickup!";
+                btnAccept.disabled = true;
+                btnPickup.disabled = false;
+                btnDeliver.disabled = true;
+                btnRelease.disabled = false;
+                startLeaseCountdown();
+            } else if (lot.state === 'picked_up') {
+                document.getElementById('timer-status').innerText = "Cargo on board! Delivering to shelter.";
+                btnAccept.disabled = true;
+                btnPickup.disabled = true;
+                btnDeliver.disabled = false;
+                btnRelease.disabled = true;
+            }
+        }
+
+        function startLeaseCountdown() {
+            if (leaseTimer) return;
+            leaseSecondsLeft = 480; // 8 minutes default adaptive TTL
+            leaseTimer = setInterval(() => {
                 if (leaseSecondsLeft > 0) {
                     leaseSecondsLeft--;
                     const m = Math.floor(leaseSecondsLeft / 60).toString().padStart(2, '0');
                     const s = (leaseSecondsLeft % 60).toString().padStart(2, '0');
-                    document.getElementById('lease-timer').innerText = `${m}:${s}`;
+                    document.getElementById('timer-countdown').innerText = `${m}:${s}`;
                 } else {
-                    document.getElementById('lease-timer').innerText = "EXPIRED";
-                    document.getElementById('lease-status').innerText = "Lease expired! Reassigned to standby courier.";
+                    clearInterval(leaseTimer);
+                    leaseTimer = null;
+                    document.getElementById('timer-countdown').innerText = "EXPIRED";
+                    document.getElementById('timer-status').innerText = "Lease expired! Reassigned to standby courier.";
                 }
             }, 1000);
         }
 
-        async function acceptClaim() {
-            if (!currentLotId) await fetchState();
-            await fetch(`/lots/${currentLotId}/accept`, {
+        // Live Route Polyline Drawing
+        function updateMapRoute(lot, state, rider) {
+            // Clean previous layers
+            if (mapLayers.riderMarker) map.removeLayer(mapLayers.riderMarker);
+            if (mapLayers.donorMarker) map.removeLayer(mapLayers.donorMarker);
+            if (mapLayers.shelterMarker) map.removeLayer(mapLayers.shelterMarker);
+            if (mapLayers.routeLine) map.removeLayer(mapLayers.routeLine);
+
+            // 1. Draw Courier Marker
+            const riderIcon = L.divIcon({
+                className: 'courier-pin',
+                html: `
+                    <div style="width:36px; height:36px; background:linear-gradient(135deg, #10b981, #059669); border:2.5px solid #fff; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 0 15px rgba(16,185,129,0.8); font-size:18px;">
+                        🛵
+                    </div>
+                `,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+            mapLayers.riderMarker = L.marker([rider.lat, rider.lon], { icon: riderIcon }).addTo(map);
+            mapLayers.riderMarker.bindPopup(`<b>🛵 ${rider.name} (You)</b><br>Live GPS Lock`);
+
+            if (!lot) {
+                map.setView([rider.lat, rider.lon], 14);
+                return;
+            }
+
+            const batch = state.batches.find(b => b.id === lot.batch_id);
+            const shelter = state.shelters.find(s => s.id === lot.target_shelter_id);
+
+            const points = [[rider.lat, rider.lon]];
+
+            // 2. Draw Donor Marker (if before delivery)
+            if (batch) {
+                const donorIcon = L.divIcon({
+                    html: `<div style="width:32px; height:32px; background:linear-gradient(135deg, #f59e0b, #d97706); border:2px solid #fff; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 0 12px rgba(245,158,11,0.8); font-size:16px;">🍲</div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+                mapLayers.donorMarker = L.marker([batch.donor_lat, batch.donor_lon], { icon: donorIcon }).addTo(map);
+                mapLayers.donorMarker.bindPopup(`<b>🍲 Pickup: ${batch.item}</b><br>${lot.quantity} meals`);
+
+                if (lot.state === 'assigned') {
+                    points.push([batch.donor_lat, batch.donor_lon]);
+                }
+            }
+
+            // 3. Draw Shelter Marker
+            if (shelter) {
+                const shelterIcon = L.divIcon({
+                    html: `<div style="width:32px; height:32px; background:linear-gradient(135deg, #0284c7, #0369a1); border:2px solid #fff; border-radius:8px; display:flex; align-items:center; justify-content:center; box-shadow:0 0 12px rgba(56,189,248,0.8); font-size:16px;">🏠</div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+                mapLayers.shelterMarker = L.marker([shelter.lat, shelter.lon], { icon: shelterIcon }).addTo(map);
+                mapLayers.shelterMarker.bindPopup(`<b>🏠 Drop-off: ${shelter.name}</b><br>Demand: ${shelter.demand}`);
+                points.push([shelter.lat, shelter.lon]);
+            }
+
+            // 4. Draw Glowing Active Route Path
+            if (points.length >= 2) {
+                const routeColor = lot.state === 'assigned' ? '#38bdf8' : '#a855f7';
+                mapLayers.routeLine = L.polyline(points, {
+                    color: routeColor,
+                    weight: 4,
+                    opacity: 0.85,
+                    dashArray: lot.state === 'assigned' ? '8, 8' : null
+                }).addTo(map);
+
+                map.fitBounds(mapLayers.routeLine.getBounds(), { padding: [40, 40] });
+            }
+        }
+
+        // Action Handlers
+        async function acceptLot() {
+            if (!currentActiveLot) return;
+            const res = await fetch(`/lots/${currentActiveLot.id}/accept`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rider_id: 'r_aarav' })
+                body: JSON.stringify({ rider_id: currentRiderId })
             });
-            document.getElementById('lease-status').innerText = "Lease started. Head to donor location!";
-            startTimer();
+            if (res.ok) {
+                fetchRiderData();
+            } else {
+                const err = await res.json();
+                alert(`Cannot accept claim: ${err.detail}`);
+            }
         }
 
         async function markPickup() {
-            if (!currentLotId) return;
-            await fetch(`/lots/${currentLotId}/picked-up`, { method: 'POST' });
-            document.getElementById('lease-status').innerText = "Cargo on board. Deliver to shelter!";
+            if (!currentActiveLot) return;
+            await fetch(`/lots/${currentActiveLot.id}/picked-up`, { method: 'POST' });
+            fetchRiderData();
         }
 
         async function markDelivered() {
-            if (!currentLotId) return;
-            await fetch(`/lots/${currentLotId}/delivered`, { method: 'POST' });
-            clearInterval(timerInterval);
-            document.getElementById('lease-timer').innerText = "DELIVERED";
-            document.getElementById('lease-status').innerText = "Safely delivered! Scoreboard updated.";
+            if (!currentActiveLot) return;
+            await fetch(`/lots/${currentActiveLot.id}/delivered`, { method: 'POST' });
+            clearInterval(leaseTimer);
+            leaseTimer = null;
+            document.getElementById('timer-countdown').innerText = "DELIVERED";
+            alert("Mission complete! Food safely delivered to shelter. Scoreboard updated.");
+            fetchRiderData();
         }
 
         async function releaseEarly() {
-            if (!currentLotId) return;
-            await fetch(`/lots/${currentLotId}/release`, {
+            if (!currentActiveLot) return;
+            await fetch(`/lots/${currentActiveLot.id}/release`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rider_id: 'r_aarav' })
+                body: JSON.stringify({ rider_id: currentRiderId })
             });
-            clearInterval(timerInterval);
-            document.getElementById('lease-timer').innerText = "RELEASED";
-            document.getElementById('lease-status').innerText = "Released penalty-free. Standby courier takes over.";
+            clearInterval(leaseTimer);
+            leaseTimer = null;
+            document.getElementById('timer-countdown').innerText = "RELEASED";
+            alert("Lot released penalty-free. Standby courier will take over.");
+            fetchRiderData();
         }
 
-        async function sendHeartbeat() {
-            await fetch('/riders/r_aarav/ping', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lat: 28.6180, lon: 77.2100 })
-            });
-            alert("Live GPS Heartbeat sent to Ops Engine!");
+        async function sendPing() {
+            const res = await fetch('/state');
+            const state = await res.json();
+            const rider = state.riders.find(r => r.id === currentRiderId);
+            if (rider) {
+                await fetch(`/riders/${currentRiderId}/ping`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat: rider.lat, lon: rider.lon })
+                });
+                alert(`Heartbeat ping broadcasted from ${rider.name}!`);
+                fetchRiderData();
+            }
         }
 
-        fetchState();
+        // Initial Load
+        fetchRiderData();
     </script>
 </body>
 </html>
