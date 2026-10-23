@@ -64,6 +64,12 @@ class Batch:
     donor_lon: float = 0.0
     created_at: Optional[datetime] = None
     tags: list[str] = field(default_factory=list)  # e.g. ["infant_formula"]
+    serve_buffer_minutes: float = 0.0
+    units_left: int = 0
+
+    def __post_init__(self):
+        if self.units_left == 0 and self.quantity > 0:
+            self.units_left = self.quantity
 
 
 @dataclass
@@ -75,6 +81,7 @@ class Lot:
     state: LotState = LotState.PENDING
     assigned_rider_id: Optional[str] = None
     target_shelter_id: Optional[str] = None
+    version: int = 1
 
 
 @dataclass
@@ -87,6 +94,8 @@ class Rider:
     lon: float = 0.0
     status: RiderStatus = RiderStatus.AVAILABLE
     last_ping: Optional[datetime] = None
+    reliability: float = 1.0
+    free_at_minutes: float = 0.0
 
 
 @dataclass
@@ -100,6 +109,13 @@ class Shelter:
     is_open: bool = True
     capabilities: list[str] = field(default_factory=list)  # e.g. ["clean_water", "refrigeration"]
     needs: list[str] = field(default_factory=list)
+    demand: int = 0
+    inbound: int = 0
+    delivered: int = 0
+
+    def __post_init__(self):
+        if self.demand == 0 and self.capacity > 0:
+            self.demand = self.capacity
 
 
 @dataclass

@@ -80,3 +80,20 @@ def lease_ttl_seconds(
         return 0
     ttl_minutes = slack * (1 - buffer_fraction)
     return max(int(ttl_minutes * 60), 0)
+
+
+def adaptive_lease_ttl_minutes(slack_minutes: float) -> float:
+    """
+    Adaptive lease TTL from Section 5.2 / Page 8 of project doc:
+        ttl = clamp(0.2 * slack, 3.0, 12.0) minutes
+    Returns 0.0 if slack is non-positive.
+    """
+    if slack_minutes <= 0:
+        return 0.0
+    return min(max(0.2 * slack_minutes, 3.0), 12.0)
+
+
+def adaptive_lease_ttl_seconds(slack_minutes: float) -> int:
+    """Return adaptive lease TTL in seconds."""
+    return int(adaptive_lease_ttl_minutes(slack_minutes) * 60)
+
