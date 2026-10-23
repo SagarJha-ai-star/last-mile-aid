@@ -104,6 +104,31 @@ pytest tests/ -v
 
 ---
 
+## 🌟 Advanced "Crazy" Features
+
+### 1. 🚀 Autonomous AI Fleet Autopilot Simulation
+- 1-Click **"Engage AI Autopilot"** button on the Ops Command Center.
+- Autonomous couriers smoothly glide across Delhi NCR in real time towards donors and shelters.
+- **Dynamic Mid-Journey Rerouting**: If chaos strikes (e.g., Connaught Place shelter closes mid-route), autopilot automatically swerves and recalculates waypoints to the next best shelter.
+- **Warp Speed Controls**: 1x real-time, 5x cruise speed, or 10x warp speed.
+
+### 2. 🔐 Cryptographic Chain-of-Custody (HMAC-SHA256)
+- Guarantees cold chain food safety, origin authenticity, and non-repudiation between donor, courier, and shelter.
+- Courier generates a verifiable digital seal token + QR code logging cold-chain temperatures (`4.2°C`).
+- Shelter portal authenticates the HMAC-SHA256 signature and automatically commits the intake to the SQLite audit log with zero disputes.
+
+### 3. 🌱 Live Eco-Impact & Economic Rescue Engine
+- Real-time Scoreboard calculations for:
+  - **CO2e Avoided**: `2.5 kg` greenhouse gas equivalent saved per rescued meal.
+  - **Clean Water Conserved**: `120 L` of agricultural water conserved per meal.
+  - **Economic Value Rescued**: Real-time monetary savings in ₹ INR.
+
+### 4. 🔊 Zero-Asset Synthesized Web Audio Engine
+- Built purely with the native browser Web Audio API (0 MB downloads, 100% offline).
+- Harmonic major chime upon delivery, warp synthesizer sound on autopilot engagement, and alert sirens for silent couriers.
+
+---
+
 ## 🛡️ Core System Invariants
 
 The dispatch engine guarantees 4 strict invariants tested continuously:

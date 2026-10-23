@@ -50,6 +50,15 @@ class BotRiderAgent:
                         self.phase = "to_donor"
                         break
 
+        # If en route to shelter, dynamically update target coordinates in case of mid-journey reroute!
+        if self.phase == "to_shelter" and self.target_lot_id:
+            lot = dispatcher.lots.get(self.target_lot_id)
+            if lot:
+                shelter = dispatcher.shelters.get(lot.target_shelter_id)
+                if shelter and (self.target_lat != shelter.lat or self.target_lon != shelter.lon):
+                    self.target_lat = shelter.lat
+                    self.target_lon = shelter.lon
+
         if not self.target_lat or not self.target_lon:
             return
 

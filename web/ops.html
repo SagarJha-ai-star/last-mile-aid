@@ -383,6 +383,22 @@
             <span id="speed-label" style="color:#a855f7;">1× Speed</span>
         </div>
 
+        <!-- AI Autopilot & Audio Controls -->
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+            <button id="btn-autopilot" class="btn" style="background:linear-gradient(135deg, rgba(16,185,129,0.2), rgba(56,189,248,0.2)); border:1px solid #10b981; color:#6ee7b7; font-weight:700; padding:0.4rem 0.85rem;" onclick="toggleAutopilot()">
+                <span id="autopilot-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 8px #10b981;"></span>
+                <span id="autopilot-text">🚀 AI Autopilot: OFF</span>
+            </button>
+            <div style="display:flex; gap:0.25rem; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:2px;">
+                <button class="btn btn-speed" style="padding:2px 8px; font-size:11px;" onclick="setAutopilotSpeed(1.0)">1×</button>
+                <button class="btn btn-speed" style="padding:2px 8px; font-size:11px;" onclick="setAutopilotSpeed(5.0)">5×</button>
+                <button class="btn btn-speed" style="padding:2px 8px; font-size:11px;" onclick="setAutopilotSpeed(10.0)">10×</button>
+            </div>
+            <button class="btn" id="btn-audio" style="padding:0.4rem 0.6rem;" onclick="toggleAudio()" title="Toggle Synthesized Audio Alerts">
+                🔊
+            </button>
+        </div>
+
         <nav class="nav-links">
             <a href="/ops" class="nav-btn active">Ops Command</a>
             <a href="/donor" class="nav-btn">Donor View</a>
@@ -412,6 +428,22 @@
         <div class="metric-card">
             <div class="metric-header">Unsafe Blocked</div>
             <div class="metric-value safe" id="metric-safe">0</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-header">🌱 CO2e Avoided</div>
+            <div class="metric-value" style="color:#10b981;" id="metric-co2e">0 kg</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-header">💧 Water Saved</div>
+            <div class="metric-value" style="color:#38bdf8;" id="metric-water">0 L</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-header">₹ Value Rescued</div>
+            <div class="metric-value" style="color:#f59e0b;" id="metric-rupees">₹0</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-header">🔐 Verified Handoffs</div>
+            <div class="metric-value" style="color:#a855f7;" id="metric-custody">0</div>
         </div>
     </section>
 
@@ -486,7 +518,68 @@
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" style="color:#64748b;">OpenStreetMap</a> contributors'
         }).addTo(map);
 
+        // Web Audio Synthesizer (0 external assets, instant zero-lag cyber audio)
+        let audioCtx = null;
+        let soundEnabled = true;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function toggleAudio() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('btn-audio').innerText = soundEnabled ? '🔊' : '🔇';
+        }
+
+        function playTone(freq, duration = 0.15, type = 'sine', gainVal = 0.08) {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function playVictoryChime() {
+            [523.25, 659.25, 783.99, 1046.50].forEach((f, idx) => {
+                setTimeout(() => playTone(f, 0.25, 'triangle', 0.1), idx * 90);
+            });
+        }
+
+        function playWarpSound() {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1100, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.09, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            } catch (e) {}
+        }
+
         let mapMarkers = {};
+        window.lastMealsSaved = 0;
 
         // WebSocket Connection
         const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -496,6 +589,15 @@
             const data = JSON.parse(event.data);
             if (data.type === 'initial_state') {
                 renderFullState(data.data);
+            } else if (data.type === 'autopilot_tick') {
+                if (data.scoreboard && data.scoreboard.meals_saved > window.lastMealsSaved) {
+                    playVictoryChime();
+                    window.lastMealsSaved = data.scoreboard.meals_saved;
+                }
+                refreshState();
+            } else if (data.type === 'autopilot_status') {
+                updateAutopilotUI(data.enabled, data.speed);
+                refreshState();
             } else {
                 appendAuditEvent(data);
                 refreshState();
@@ -517,13 +619,29 @@
             document.getElementById('sim-clock-val').innerText = `t = ${state.clock_minutes}m`;
             document.getElementById('speed-label').innerText = `${state.clock_multiplier}× Speed`;
 
+            // Update autopilot indicator
+            if (state.autopilot) {
+                updateAutopilotUI(state.autopilot.enabled, state.autopilot.speed);
+            }
+
             // Update scoreboard
             const sb = state.scoreboard;
+            if (sb.meals_saved > window.lastMealsSaved) {
+                window.lastMealsSaved = sb.meals_saved;
+            }
             document.getElementById('metric-saved').innerText = sb.meals_saved;
             document.getElementById('metric-lost').innerText = sb.meals_lost;
             document.getElementById('metric-ghost').innerText = `${sb.ghost_minutes_eliminated}m`;
             document.getElementById('metric-reroutes').innerText = sb.reroutes_completed;
             document.getElementById('metric-safe').innerText = sb.unsafe_matches_blocked;
+
+            // Eco & Financial Impact
+            if (document.getElementById('metric-co2e')) {
+                document.getElementById('metric-co2e').innerText = `${sb.co2e_avoided_kg || 0} kg`;
+                document.getElementById('metric-water').innerText = `${sb.water_conserved_liters || 0} L`;
+                document.getElementById('metric-rupees').innerText = `₹${sb.rupees_saved || 0}`;
+                document.getElementById('metric-custody').innerText = sb.custody_transfers || 0;
+            }
 
             // Clear old markers
             Object.values(mapMarkers).forEach(m => map.removeLayer(m));
@@ -719,6 +837,50 @@
                 body: JSON.stringify({ minutes: min })
             });
             refreshState();
+        }
+
+        async function toggleAutopilot() {
+            initAudio();
+            playWarpSound();
+            const res = await fetch('/autopilot/toggle', { method: 'POST' });
+            const data = await res.json();
+            updateAutopilotUI(data.enabled, data.speed);
+        }
+
+        async function setAutopilotSpeed(speed) {
+            initAudio();
+            playTone(600 + speed * 40, 0.1, 'sine');
+            const res = await fetch('/autopilot/speed', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ multiplier: speed })
+            });
+            const data = await res.json();
+            updateAutopilotUI(window.currentAutopilotEnabled, data.speed);
+        }
+
+        function updateAutopilotUI(enabled, speed) {
+            window.currentAutopilotEnabled = enabled;
+            const btn = document.getElementById('btn-autopilot');
+            const dot = document.getElementById('autopilot-dot');
+            const text = document.getElementById('autopilot-text');
+            if (!btn || !dot || !text) return;
+
+            if (enabled) {
+                btn.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.35), rgba(56,189,248,0.35))';
+                btn.style.borderColor = '#38bdf8';
+                btn.style.boxShadow = '0 0 15px rgba(56,189,248,0.5)';
+                dot.style.background = '#38bdf8';
+                dot.style.boxShadow = '0 0 10px #38bdf8';
+                text.innerText = `🚀 AI Autopilot: ON (${speed || 1}×)`;
+            } else {
+                btn.style.background = 'rgba(255,255,255,0.06)';
+                btn.style.borderColor = 'var(--border)';
+                btn.style.boxShadow = 'none';
+                dot.style.background = '#64748b';
+                dot.style.boxShadow = 'none';
+                text.innerText = '🚀 AI Autopilot: OFF';
+            }
         }
 
         // Initial fetch

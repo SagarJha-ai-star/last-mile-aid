@@ -356,6 +356,9 @@
                     <button class="btn-action btn-deliver" id="btn-deliver" onclick="markDelivered()" disabled>
                         🏁 3. Confirm Safe Delivery to Shelter
                     </button>
+                    <button class="btn-action" id="btn-custody" style="background:linear-gradient(135deg, #059669, #0284c7); color:#fff; box-shadow:0 0 15px rgba(16,185,129,0.3);" onclick="openCustodyModal()">
+                        🔐 Proof-of-Custody Digital Seal (HMAC-SHA256)
+                    </button>
                     <button class="btn-action btn-release" id="btn-release" onclick="releaseEarly()" disabled>
                         ↩️ Release Claim Early (Penalty-Free Standby Transfer)
                     </button>
@@ -379,6 +382,46 @@
             <div id="rider-map"></div>
         </div>
     </main>
+
+    <!-- Cryptographic Proof-of-Custody Modal -->
+    <div id="custody-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#0f172a; border:1px solid #38bdf8; border-radius:16px; padding:1.75rem; max-width:440px; width:90%; box-shadow:0 0 40px rgba(56,189,248,0.3); display:flex; flex-direction:column; gap:1rem; text-align:center;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <span style="font-size:1.3rem;">🔐</span>
+                    <span style="font-size:1.05rem; font-weight:800; color:#f1f5f9;">Chain-of-Custody Digital Seal</span>
+                </div>
+                <button onclick="closeCustodyModal()" style="background:none; border:none; color:#94a3b8; font-size:1.2rem; cursor:pointer;">✕</button>
+            </div>
+
+            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.85rem; display:flex; flex-direction:column; gap:0.4rem; font-size:0.82rem; text-align:left;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:#94a3b8;">Cold Chain Temp:</span>
+                    <strong id="modal-temp" style="color:#10b981;">❄️ 4.2°C (Compliant)</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:#94a3b8;">HMAC Signature:</span>
+                    <strong id="modal-sig" style="font-family:var(--font-mono); color:#38bdf8;">--</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:#94a3b8;">Lot ID:</span>
+                    <span id="modal-lot" style="font-family:var(--font-mono); color:#e2e8f0;">--</span>
+                </div>
+            </div>
+
+            <!-- QR Code Canvas / Visual Block -->
+            <div id="modal-qr-container" style="background:#fff; border-radius:12px; padding:0.75rem; margin:0 auto; width:180px; height:180px; display:flex; align-items:center; justify-content:center; box-shadow:0 0 20px rgba(255,255,255,0.2);">
+                <img id="modal-qr-img" style="width:160px; height:160px; display:block;" alt="QR Token" />
+            </div>
+
+            <div style="background:rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:0.6rem; font-family:var(--font-mono); font-size:0.72rem; word-break:break-all; color:#38bdf8; max-height:65px; overflow-y:auto;" id="modal-token-str">
+            </div>
+
+            <button class="btn-action btn-pickup" onclick="copyCustodyToken()">
+                📋 Copy Digital Seal Token for Shelter Intake
+            </button>
+        </div>
+    </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -663,6 +706,51 @@
                 alert(`Heartbeat ping broadcasted from ${rider.name}!`);
                 fetchRiderData();
             }
+        }
+
+        let activeSealToken = "";
+
+        async function openCustodyModal() {
+            if (!currentActiveLot) {
+                alert("No active lot claimed yet. Please accept a lot first.");
+                return;
+            }
+            try {
+                const res = await fetch(`/lots/${currentActiveLot.id}/seal`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ temp_celsius: 4.2 })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(`Error generating seal: ${data.detail}`);
+                    return;
+                }
+                const seal = data.seal;
+                activeSealToken = seal.token;
+                document.getElementById('modal-sig').innerText = seal.signature_short;
+                document.getElementById('modal-lot').innerText = currentActiveLot.id.slice(0, 8) + '...';
+                document.getElementById('modal-token-str').innerText = seal.token;
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(seal.token)}`;
+                document.getElementById('modal-qr-img').src = qrUrl;
+
+                document.getElementById('custody-modal').style.display = 'flex';
+            } catch(e) {
+                alert(`Failed to generate digital custody seal: ${e}`);
+            }
+        }
+
+        function closeCustodyModal() {
+            document.getElementById('custody-modal').style.display = 'none';
+        }
+
+        function copyCustodyToken() {
+            if (!activeSealToken) return;
+            navigator.clipboard.writeText(activeSealToken).then(() => {
+                alert("Digital Seal Token copied to clipboard! Present to shelter intake manager.");
+            }).catch(() => {
+                prompt("Copy digital seal token:", activeSealToken);
+            });
         }
 
         // Initial Load

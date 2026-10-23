@@ -18,6 +18,7 @@ from typing import Any, Optional
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,8 +34,10 @@ from engine.event_log import EventLog
 from engine.slack import compute_slack
 from engine.geo import travel_time_minutes
 from engine.rules import check_safety
+from engine.crypto_custody import generate_custody_seal, verify_custody_seal
 from sim.clock import SimulatedClock
 from sim.chaos import ChaosConsole
+from sim.bot_riders import BotRiderAgent
 from api.ws import ConnectionManager
 
 
@@ -66,6 +69,19 @@ resilience = ResilienceManager(event_log=event_log)
 sim_clock = SimulatedClock(start_minutes=0.0)
 chaos = ChaosConsole(dispatcher=dispatcher, resilience=resilience, event_log=event_log)
 ws_manager = ConnectionManager(event_log=event_log)
+
+# AI Autopilot & Autonomous Fleet Simulation State
+autopilot_state = {
+    "enabled": False,
+    "speed_multiplier": 1.0,
+}
+
+bot_agents: dict[str, BotRiderAgent] = {
+    "r_aarav": BotRiderAgent(rider_id="r_aarav"),
+    "r_priya": BotRiderAgent(rider_id="r_priya"),
+    "r_vikram": BotRiderAgent(rider_id="r_vikram"),
+    "r_rohan": BotRiderAgent(rider_id="r_rohan"),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -112,12 +128,24 @@ class ClockAdvanceRequest(BaseModel):
     multiplier: Optional[float] = None
 
 
+class CustodySealRequest(BaseModel):
+    temp_celsius: Optional[float] = 4.5
+
+
+class VerifyCustodyRequest(BaseModel):
+    token: str
+
+
+class AutopilotSpeedRequest(BaseModel):
+    multiplier: float = 1.0
+
+
 # ---------------------------------------------------------------------------
 # Scoreboard Metrics
 # ---------------------------------------------------------------------------
 
 def compute_scoreboard() -> dict[str, Any]:
-    """Calculates live scoreboard metrics."""
+    """Calculates live scoreboard metrics including eco-impact & financial savings."""
     meals_saved = sum(s.delivered for s in dispatcher.shelters.values())
     meals_lost = sum(lot.quantity for lot in dispatcher.lots.values() if lot.state == LotState.LOST)
     ghost_minutes_eliminated = len(event_log.by_type("standby_takeover")) * 15  # average minutes saved per standby takeover
@@ -125,6 +153,10 @@ def compute_scoreboard() -> dict[str, Any]:
     unsafe_blocked = len(event_log.by_type("claim_rejected")) + len(
         [e for e in event_log.by_type("plan_updated") if "unsafe" in e.reason.lower()]
     )
+    custody_transfers = len(event_log.by_type("custody_verified"))
+    co2e_avoided_kg = round(meals_saved * 2.5, 1)
+    water_conserved_liters = meals_saved * 120
+    rupees_saved = meals_saved * 120
 
     return {
         "meals_saved": meals_saved,
@@ -132,6 +164,12 @@ def compute_scoreboard() -> dict[str, Any]:
         "ghost_minutes_eliminated": ghost_minutes_eliminated,
         "reroutes_completed": reroutes_completed,
         "unsafe_matches_blocked": unsafe_blocked,
+        "custody_transfers": custody_transfers,
+        "co2e_avoided_kg": co2e_avoided_kg,
+        "water_conserved_liters": water_conserved_liters,
+        "rupees_saved": rupees_saved,
+        "autopilot_enabled": autopilot_state["enabled"],
+        "autopilot_speed": autopilot_state["speed_multiplier"],
     }
 
 
@@ -226,18 +264,36 @@ async def startup_event():
     loop = asyncio.get_event_loop()
     ws_manager.set_event_loop(loop)
 
-    # Background task to check lease expirations and tick clock
+    # Background task to check lease expirations, autopilot ticks, and clock
     async def periodic_dispatcher_loop():
         while True:
-            await asyncio.sleep(2.0)
-            now_min = sim_clock.tick_realtime()
-            expired = dispatcher.expire_leases(now_min)
-            if expired:
+            if autopilot_state["enabled"]:
+                await asyncio.sleep(1.0)
+                delta_min = 0.5 * autopilot_state["speed_multiplier"]
+                now_min = sim_clock.advance_minutes(delta_min)
+                dispatcher.expire_leases(now_min)
+                for bot in bot_agents.values():
+                    bot.speed_kmh = 35.0 * autopilot_state["speed_multiplier"]
+                    bot.step(dispatcher, delta_min, event_log)
+
                 await ws_manager.broadcast({
-                    "type": "leases_checked",
-                    "expired_count": len(expired),
-                    "now_minutes": now_min,
+                    "type": "autopilot_tick",
+                    "now_minutes": round(now_min, 2),
+                    "riders": list(dispatcher.riders.values()),
+                    "lots": list(dispatcher.lots.values()),
+                    "shelters": list(dispatcher.shelters.values()),
+                    "scoreboard": compute_scoreboard(),
                 })
+            else:
+                await asyncio.sleep(2.0)
+                now_min = sim_clock.tick_realtime()
+                expired = dispatcher.expire_leases(now_min)
+                if expired:
+                    await ws_manager.broadcast({
+                        "type": "leases_checked",
+                        "expired_count": len(expired),
+                        "now_minutes": now_min,
+                    })
 
     asyncio.create_task(periodic_dispatcher_loop())
 
@@ -357,6 +413,78 @@ def mark_lot_delivered(lot_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/lots/{lot_id}/seal")
+def create_lot_seal(lot_id: str, req: Optional[CustodySealRequest] = None):
+    """Generates an HMAC-SHA256 Cryptographic Chain-of-Custody seal."""
+    lot = dispatcher.lots.get(lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lot not found")
+    batch = dispatcher.batches.get(lot.batch_id)
+    item_name = batch.item if batch else "Aid Provisions"
+    temp_c = req.temp_celsius if (req and req.temp_celsius is not None) else 4.5
+
+    seal = generate_custody_seal(
+        lot_id=lot.id,
+        batch_id=lot.batch_id,
+        rider_id=lot.assigned_rider_id or "unassigned",
+        shelter_id=lot.target_shelter_id,
+        quantity=lot.quantity,
+        item_name=item_name,
+        temp_celsius=temp_c,
+    )
+
+    event_log.append(
+        "custody_seal_generated",
+        {"lot_id": lot.id, "rider_id": lot.assigned_rider_id, "signature": seal["signature_short"]},
+        reason=f"Cryptographic Chain-of-Custody seal generated with signature [{seal['signature_short']}] at {temp_c}°C",
+    )
+    return {"status": "ok", "seal": seal}
+
+
+@app.post("/lots/{lot_id}/verify-seal")
+def verify_lot_seal(lot_id: str, req: VerifyCustodyRequest):
+    """Verifies an HMAC-SHA256 Cryptographic Chain-of-Custody seal and confirms delivery."""
+    lot = dispatcher.lots.get(lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lot not found")
+
+    valid, payload, msg = verify_custody_seal(req.token)
+    if not valid or not payload:
+        event_log.append(
+            "custody_verification_failed",
+            {"lot_id": lot.id, "token": req.token[:20] + "..."},
+            reason=f"SECURITY ALERT: Tampered or invalid custody seal rejected: {msg}",
+        )
+        raise HTTPException(status_code=400, detail=msg)
+
+    if payload.get("lot_id") != lot.id:
+        raise HTTPException(status_code=400, detail=f"Seal lot_id {payload.get('lot_id')} does not match requested lot {lot.id}")
+
+    # Mark delivered if not already delivered
+    if lot.state != LotState.DELIVERED:
+        dispatcher.mark_delivered(lot.id, now_minutes=sim_clock.current_minutes)
+
+    event_log.append(
+        "custody_verified",
+        {
+            "lot_id": lot.id,
+            "rider_id": payload.get("rider_id"),
+            "shelter_id": payload.get("shelter_id"),
+            "temp_c": payload.get("temp_c"),
+            "sig": req.token.split(".")[1],
+        },
+        reason=f"Chain-of-Custody VERIFIED! Safe handoff confirmed for {payload.get('quantity')} units to Shelter {payload.get('shelter_id')}",
+    )
+
+    return {
+        "status": "verified",
+        "message": "Chain-of-Custody Cryptographic Verification Succeeded!",
+        "payload": payload,
+        "lot": lot,
+        "scoreboard": compute_scoreboard(),
+    }
+
+
 @app.post("/shelters/{shelter_id}/status")
 def update_shelter_status(shelter_id: str, req: ShelterStatusRequest):
     """Toggle shelter demand, capabilities, or open/closed."""
@@ -412,6 +540,48 @@ def advance_clock(req: ClockAdvanceRequest):
     return {"current_minutes": round(new_time, 2), "multiplier": sim_clock.multiplier}
 
 
+@app.post("/autopilot/toggle")
+async def toggle_autopilot():
+    """Toggle autonomous AI courier simulation mode."""
+    autopilot_state["enabled"] = not autopilot_state["enabled"]
+    state_str = "ENGAGED" if autopilot_state["enabled"] else "DISENGAGED"
+    event_log.append(
+        "autopilot_toggled",
+        {"enabled": autopilot_state["enabled"], "speed": autopilot_state["speed_multiplier"]},
+        reason=f"AI Autopilot Fleet Simulation {state_str} at {autopilot_state['speed_multiplier']}x speed",
+    )
+    await ws_manager.broadcast({
+        "type": "autopilot_status",
+        "enabled": autopilot_state["enabled"],
+        "speed": autopilot_state["speed_multiplier"],
+    })
+    return {"status": "ok", "enabled": autopilot_state["enabled"], "speed": autopilot_state["speed_multiplier"]}
+
+
+@app.post("/autopilot/speed")
+async def set_autopilot_speed(req: AutopilotSpeedRequest):
+    """Set autopilot warp speed multiplier (e.g. 1.0, 5.0, 10.0)."""
+    mult = max(0.5, min(req.multiplier, 20.0))
+    autopilot_state["speed_multiplier"] = mult
+    event_log.append(
+        "autopilot_speed_changed",
+        {"speed": mult},
+        reason=f"AI Autopilot Warp Speed set to {mult}x",
+    )
+    await ws_manager.broadcast({
+        "type": "autopilot_status",
+        "enabled": autopilot_state["enabled"],
+        "speed": mult,
+    })
+    return {"status": "ok", "speed": mult}
+
+
+@app.get("/autopilot/status")
+def get_autopilot_status():
+    """Get current status of AI Autopilot."""
+    return {"enabled": autopilot_state["enabled"], "speed": autopilot_state["speed_multiplier"]}
+
+
 @app.get("/events")
 def get_events():
     """Audit log of all events."""
@@ -431,6 +601,10 @@ def get_state():
         "clock_minutes": round(sim_clock.current_minutes, 2),
         "clock_multiplier": sim_clock.multiplier,
         "traffic_multiplier": chaos.traffic_multiplier,
+        "autopilot": {
+            "enabled": autopilot_state["enabled"],
+            "speed": autopilot_state["speed_multiplier"],
+        },
         "scoreboard": compute_scoreboard(),
         "batches": list(dispatcher.batches.values()),
         "lots": list(dispatcher.lots.values()),
@@ -597,10 +771,10 @@ async def websocket_endpoint(websocket: WebSocket):
     await ws_manager.connect(websocket)
     try:
         # Send initial full state on connect
-        await websocket.send_json({
+        await websocket.send_json(jsonable_encoder({
             "type": "initial_state",
             "data": get_state(),
-        })
+        }))
         while True:
             # Keep connection open and accept client messages if any
             data = await websocket.receive_text()

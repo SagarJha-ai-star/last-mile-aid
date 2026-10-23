@@ -12,6 +12,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 from fastapi import WebSocket
+from fastapi.encoders import jsonable_encoder
 
 from engine.event_log import Event, EventLog
 
@@ -40,7 +41,8 @@ class ConnectionManager:
     async def broadcast(self, message: dict[str, Any]) -> None:
         """Send JSON message to all connected clients."""
         dead_connections: list[WebSocket] = []
-        payload_text = json.dumps(message)
+        encoded = jsonable_encoder(message)
+        payload_text = json.dumps(encoded)
 
         for connection in self.active_connections:
             try:

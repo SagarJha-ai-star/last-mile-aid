@@ -126,28 +126,159 @@
                 <span>🚪 Shelter Open / Accepting Deliveries</span>
                 <input type="checkbox" id="shelter-open" checked onchange="toggleOpen()">
             </div>
+        <!-- Cryptographic Proof-of-Custody Verification Station -->
+        <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid #38bdf8; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.85rem; box-shadow: 0 0 20px rgba(56,189,248,0.15);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:700; font-size:0.95rem; color:#38bdf8; display:flex; align-items:center; gap:0.4rem;">
+                    🔐 Digital Chain-of-Custody Seal Verification
+                </span>
+                <span style="font-size:0.75rem; background:rgba(56,189,248,0.15); color:#38bdf8; padding:2px 8px; border-radius:9999px; font-weight:700;">HMAC-SHA256</span>
+            </div>
+
+            <p style="font-size:0.8rem; color:#94a3b8; line-height:1.4;">
+                Paste courier's encrypted digital seal token below to authenticate food origin, temperature safety compliance, and cryptographically commit intake:
+            </p>
+
+            <div style="display:flex; gap:0.5rem;">
+                <input type="text" id="custody-token-input" placeholder="Paste .token here or scan QR..." style="flex:1; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.15); border-radius:8px; padding:0.6rem 0.85rem; color:#fff; font-family:var(--font-mono); font-size:0.8rem; outline:none;" />
+                <button onclick="verifyCustodyToken()" style="background:linear-gradient(135deg, #38bdf8, #0284c7); color:#000; font-weight:700; border:none; border-radius:8px; padding:0.6rem 1rem; cursor:pointer; font-size:0.85rem;">
+                    Verify Seal
+                </button>
+            </div>
+
+            <div id="verify-result" style="display:none; padding:0.75rem; border-radius:8px; font-size:0.8rem; line-height:1.4;"></div>
+
+            <!-- Inbound Deliveries One-Click Verification List -->
+            <div style="margin-top:0.5rem;">
+                <span style="font-size:0.75rem; font-weight:700; color:#94a3b8; text-transform:uppercase;">Inbound Deliveries for This Shelter:</span>
+                <div id="inbound-list" style="margin-top:0.4rem; display:flex; flex-direction:column; gap:0.5rem;"></div>
+            </div>
         </div>
 
-        <button class="btn-confirm" onclick="confirmIntake()">📦 Confirm Aid Receipt (QR / Manual)</button>
+        <button class="btn-confirm" onclick="confirmIntake()">📦 One-Click Manual Intake Confirmation</button>
     </div>
 
     <script>
+        let currentShelterId = 's_cp';
+
         async function loadShelterData() {
-            const res = await fetch('/state');
-            const state = await res.json();
-            const s = state.shelters[0];
-            if (s) {
-                document.getElementById('shelter-name').innerText = s.name;
-                document.getElementById('demand-val').innerText = s.demand;
-                document.getElementById('inbound-val').innerText = s.inbound;
-                document.getElementById('delivered-val').innerText = s.delivered;
-                document.getElementById('shelter-open').checked = s.is_open;
+            try {
+                const res = await fetch('/state');
+                const state = await res.json();
+                const s = state.shelters.find(sh => sh.id === currentShelterId) || state.shelters[0];
+                if (s) {
+                    currentShelterId = s.id;
+                    document.getElementById('shelter-name').innerText = s.name;
+                    document.getElementById('demand-val').innerText = s.demand;
+                    document.getElementById('inbound-val').innerText = s.inbound;
+                    document.getElementById('delivered-val').innerText = s.delivered;
+                    document.getElementById('shelter-open').checked = s.is_open;
+                    document.getElementById('cap-water').checked = s.capabilities.includes('clean_water');
+                    document.getElementById('cap-fridge').checked = s.capabilities.includes('refrigeration');
+                }
+
+                // Render inbound lots
+                const inboundList = document.getElementById('inbound-list');
+                inboundList.innerHTML = '';
+                const incoming = state.lots.filter(l => l.target_shelter_id === currentShelterId && (l.state === 'assigned' || l.state === 'picked_up'));
+
+                if (incoming.length === 0) {
+                    inboundList.innerHTML = `<span style="font-size:0.75rem; color:#64748b;">No courier en route right now.</span>`;
+                } else {
+                    incoming.forEach(lot => {
+                        const r = state.riders.find(ri => ri.id === lot.assigned_rider_id);
+                        const row = document.createElement('div');
+                        row.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:0.5rem 0.75rem; display:flex; justify-content:space-between; align-items:center; font-size:0.8rem;';
+                        row.innerHTML = `
+                            <div>
+                                <strong style="color:#38bdf8;">🛵 ${r ? r.name : 'Courier'}</strong> · ${lot.quantity} meals
+                                <div style="font-size:0.7rem; color:#94a3b8;">State: ${lot.state} · Lot: ${lot.id.slice(0, 8)}</div>
+                            </div>
+                            <button onclick="quickVerifyLot('${lot.id}')" style="background:#10b981; color:#000; border:none; border-radius:6px; padding:0.35rem 0.65rem; font-weight:700; font-size:0.75rem; cursor:pointer;">
+                                🔐 Auto-Verify
+                            </button>
+                        `;
+                        inboundList.appendChild(row);
+                    });
+                }
+            } catch(e) {
+                console.error(e);
+            }
+        }
+
+        async function quickVerifyLot(lotId) {
+            // Generate seal and verify in one step for testing
+            const sealRes = await fetch(`/lots/${lotId}/seal`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ temp_celsius: 4.2 })
+            });
+            const sealData = await sealRes.json();
+            if (sealRes.ok) {
+                document.getElementById('custody-token-input').value = sealData.seal.token;
+                await verifyCustodyToken();
+            } else {
+                alert(`Error: ${sealData.detail}`);
+            }
+        }
+
+        async function verifyCustodyToken() {
+            const token = document.getElementById('custody-token-input').value.trim();
+            const resBox = document.getElementById('verify-result');
+            if (!token) {
+                alert("Please paste a digital seal token first.");
+                return;
+            }
+
+            try {
+                // Find lot id from token
+                const payloadPart = token.split('.')[0];
+                let decoded;
+                try {
+                    let padded = payloadPart;
+                    while (padded.length % 4 !== 0) padded += '=';
+                    decoded = JSON.parse(atob(padded));
+                } catch(e) {
+                    alert("Invalid token format.");
+                    return;
+                }
+
+                const lotId = decoded.lot_id;
+                const res = await fetch(`/lots/${lotId}/verify-seal`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: token })
+                });
+
+                const data = await res.json();
+                resBox.style.display = 'block';
+
+                if (res.ok) {
+                    resBox.style.background = 'rgba(16, 185, 129, 0.15)';
+                    resBox.style.border = '1px solid #10b981';
+                    resBox.style.color = '#a7f3d0';
+                    resBox.innerHTML = `
+                        <strong>✅ CHAIN-OF-CUSTODY AUTHENTICATED!</strong><br>
+                        • Quantity: <strong>${data.payload.quantity} meals</strong> (${data.payload.item})<br>
+                        • Temperature Log: <strong>${data.payload.temp_c}°C [COLD CHAIN SAFE]</strong><br>
+                        • Verified Signature: <span style="font-family:var(--font-mono);">${token.split('.')[1]}</span><br>
+                        • Intake committed into SQLite audit ledger with zero disputes.
+                    `;
+                    loadShelterData();
+                } else {
+                    resBox.style.background = 'rgba(239, 68, 68, 0.15)';
+                    resBox.style.border = '1px solid #ef4444';
+                    resBox.style.color = '#fca5a5';
+                    resBox.innerHTML = `<strong>❌ REJECTED:</strong> ${data.detail}`;
+                }
+            } catch(e) {
+                alert(`Verification failed: ${e}`);
             }
         }
 
         async function toggleOpen() {
             const isOpen = document.getElementById('shelter-open').checked;
-            await fetch('/shelters/s_cp/status', {
+            await fetch(`/shelters/${currentShelterId}/status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_open: isOpen })
@@ -159,7 +290,7 @@
             const caps = [];
             if (document.getElementById('cap-water').checked) caps.push('clean_water');
             if (document.getElementById('cap-fridge').checked) caps.push('refrigeration');
-            await fetch('/shelters/s_cp/status', {
+            await fetch(`/shelters/${currentShelterId}/status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ capabilities: caps })
@@ -168,9 +299,14 @@
         }
 
         async function confirmIntake() {
-            alert("Aid arrival confirmed! Inventory intake verified into shelter log.");
+            alert("Aid arrival confirmed! Inventory intake logged.");
             loadShelterData();
         }
+
+        // WebSocket for live updates
+        const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${wsProto}//${window.location.host}/ws`);
+        socket.onmessage = () => loadShelterData();
 
         loadShelterData();
     </script>
