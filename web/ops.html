@@ -431,6 +431,12 @@
             <!-- Leaflet Map Container -->
             <div id="map"></div>
 
+            <!-- Live Courier Fleet Bar -->
+            <div id="courier-fleet-bar" style="padding: 0.6rem 1.25rem; background: rgba(16, 24, 40, 0.95); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 0.75rem; overflow-x: auto;">
+                <span style="font-size:0.75rem; font-weight:700; color:#38bdf8; text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">🛵 Active Fleet:</span>
+                <div id="courier-chips" style="display:flex; gap:0.5rem; flex-wrap:nowrap;"></div>
+            </div>
+
             <!-- 1-Click Scenario Runner -->
             <div class="controls-bar">
                 <span class="control-group-title">🎯 1-Click Scenarios:</span>
@@ -523,50 +529,114 @@
             Object.values(mapMarkers).forEach(m => map.removeLayer(m));
             mapMarkers = {};
 
-            // Render Shelters
+            // Render Shelters with House Icon & Nameplate
             state.shelters.forEach(s => {
-                const color = s.is_open ? '#38bdf8' : '#64748b';
-                const circle = L.circleMarker([s.lat, s.lon], {
-                    radius: 10,
-                    fillColor: color,
-                    color: '#fff',
-                    weight: 2,
-                    fillOpacity: 0.85
-                }).addTo(map);
-                circle.bindPopup(`<b>${s.name}</b><br>Demand: ${s.demand}<br>Inbound: ${s.inbound}<br>Status: ${s.is_open ? 'OPEN' : 'CLOSED'}`);
-                mapMarkers[`shelter_${s.id}`] = circle;
+                const isOp = s.is_open;
+                const bg = isOp ? 'linear-gradient(135deg, #0284c7, #0369a1)' : '#475569';
+                const glow = isOp ? '0 0 12px rgba(56,189,248,0.6)' : 'none';
+
+                const icon = L.divIcon({
+                    className: 'custom-map-icon',
+                    html: `
+                        <div style="display:flex; flex-direction:column; align-items:center; transform:translate(-50%, -50%); cursor:pointer;">
+                            <div style="width:34px; height:34px; background:${bg}; border:2px solid #fff; border-radius:8px; display:flex; align-items:center; justify-content:center; box-shadow:${glow}; font-size:16px;">
+                                🏠
+                            </div>
+                            <div style="margin-top:3px; background:rgba(15,23,42,0.9); border:1px solid rgba(255,255,255,0.2); color:#e2e8f0; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,0.5);">
+                                ${s.name} (${s.demand})
+                            </div>
+                        </div>
+                    `,
+                    iconSize: [0, 0]
+                });
+
+                const marker = L.marker([s.lat, s.lon], { icon }).addTo(map);
+                marker.bindPopup(`<b>🏠 ${s.name}</b><br>Demand: ${s.demand}<br>Inbound: ${s.inbound}<br>Delivered: ${s.delivered}<br>Status: ${s.is_open ? 'OPEN' : 'CLOSED'}`);
+                mapMarkers[`shelter_${s.id}`] = marker;
             });
 
-            // Render Riders
+            // Render Riders with Scooter Icon, Status Color & Nameplate
             state.riders.forEach(r => {
-                let color = '#10b981'; // available
-                if (r.status === 'silent_yellow') color = '#f59e0b';
-                if (r.status === 'silent_red') color = '#f43f5e';
-                if (r.status === 'busy') color = '#a855f7';
+                let bg = 'linear-gradient(135deg, #10b981, #059669)'; // available
+                let glow = '0 0 14px rgba(16,185,129,0.7)';
+                let statusBadge = '🟢 Ready';
 
-                const marker = L.circleMarker([r.lat, r.lon], {
-                    radius: 8,
-                    fillColor: color,
-                    color: '#ffffff',
-                    weight: 1.5,
-                    fillOpacity: 0.95
-                }).addTo(map);
-                marker.bindPopup(`<b>🛵 ${r.name}</b><br>Capacity: ${r.capacity}<br>Status: ${r.status}`);
+                if (r.status === 'silent_yellow') {
+                    bg = 'linear-gradient(135deg, #f59e0b, #d97706)';
+                    glow = '0 0 14px rgba(245,158,11,0.8)';
+                    statusBadge = '🟡 Warning';
+                } else if (r.status === 'silent_red') {
+                    bg = 'linear-gradient(135deg, #ef4444, #b91c1c)';
+                    glow = '0 0 16px rgba(239,68,68,0.9)';
+                    statusBadge = '🔴 Vanished';
+                } else if (r.status === 'busy') {
+                    bg = 'linear-gradient(135deg, #8b5cf6, #6d28d9)';
+                    glow = '0 0 14px rgba(139,92,246,0.7)';
+                    statusBadge = '🟣 In Transit';
+                }
+
+                const icon = L.divIcon({
+                    className: 'custom-map-icon',
+                    html: `
+                        <div style="display:flex; flex-direction:column; align-items:center; transform:translate(-50%, -50%); cursor:pointer;">
+                            <div style="width:36px; height:36px; background:${bg}; border:2.5px solid #ffffff; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:${glow}; font-size:18px;">
+                                🛵
+                            </div>
+                            <div style="margin-top:3px; background:rgba(15,23,42,0.95); border:1px solid rgba(255,255,255,0.25); color:#ffffff; font-size:10px; font-weight:800; padding:1px 6px; border-radius:4px; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,0.6);">
+                                ${r.name} · ${statusBadge}
+                            </div>
+                        </div>
+                    `,
+                    iconSize: [0, 0]
+                });
+
+                const marker = L.marker([r.lat, r.lon], { icon }).addTo(map);
+                marker.bindPopup(`<b>🛵 Courier: ${r.name}</b><br>Capacity: ${r.capacity} meals<br>Status: <b>${r.status}</b><br>Reliability: ${(r.reliability * 100).toFixed(0)}%`);
                 mapMarkers[`rider_${r.id}`] = marker;
             });
 
-            // Render Donors/Batches
+            // Render Donors/Batches with Food Pot Icon
             state.batches.forEach(b => {
-                const marker = L.circleMarker([b.donor_lat, b.donor_lon], {
-                    radius: 9,
-                    fillColor: '#f59e0b',
-                    color: '#fff',
-                    weight: 2,
-                    fillOpacity: 0.9
-                }).addTo(map);
-                marker.bindPopup(`<b>🍲 Batch: ${b.item}</b><br>Quantity: ${b.quantity} meals<br>Expiry: ${b.expiry_minutes}m`);
+                const icon = L.divIcon({
+                    className: 'custom-map-icon',
+                    html: `
+                        <div style="display:flex; flex-direction:column; align-items:center; transform:translate(-50%, -50%); cursor:pointer;">
+                            <div style="width:36px; height:36px; background:linear-gradient(135deg, #f59e0b, #d97706); border:2px solid #ffffff; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 0 14px rgba(245,158,11,0.8); font-size:18px;">
+                                🍲
+                            </div>
+                            <div style="margin-top:3px; background:rgba(15,23,42,0.95); border:1px solid rgba(245,158,11,0.5); color:#fef3c7; font-size:10px; font-weight:800; padding:1px 6px; border-radius:4px; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,0.6);">
+                                Donor (${b.quantity} meals)
+                            </div>
+                        </div>
+                    `,
+                    iconSize: [0, 0]
+                });
+
+                const marker = L.marker([b.donor_lat, b.donor_lon], { icon }).addTo(map);
+                marker.bindPopup(`<b>🍲 Donation: ${b.item}</b><br>Quantity: ${b.quantity} meals<br>Expiry: ${b.expiry_minutes}m`);
                 mapMarkers[`batch_${b.id}`] = marker;
             });
+
+            // Populate Courier Fleet Chips
+            const chipsContainer = document.getElementById('courier-chips');
+            if (chipsContainer) {
+                chipsContainer.innerHTML = '';
+                state.riders.forEach(r => {
+                    let chipColor = '#10b981';
+                    if (r.status === 'silent_yellow') chipColor = '#f59e0b';
+                    if (r.status === 'silent_red') chipColor = '#ef4444';
+                    if (r.status === 'busy') chipColor = '#a855f7';
+
+                    const chip = document.createElement('div');
+                    chip.style.cssText = `background:rgba(255,255,255,0.06); border:1px solid ${chipColor}; border-radius:6px; padding:2px 8px; font-size:11px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap; transition:all 0.2s;`;
+                    chip.innerHTML = `<span>🛵 ${r.name.split(' ')[0]}</span> <span style="color:${chipColor}; font-size:9px;">[${r.status}]</span>`;
+                    chip.onclick = () => {
+                        map.flyTo([r.lat, r.lon], 15, { animate: true, duration: 1.0 });
+                        if (mapMarkers[`rider_${r.id}`]) mapMarkers[`rider_${r.id}`].openPopup();
+                    };
+                    chipsContainer.appendChild(chip);
+                });
+            }
         }
 
         function appendAuditEvent(ev) {
